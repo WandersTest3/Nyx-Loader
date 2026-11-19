@@ -22,6 +22,7 @@ cp "$JAR" "$STAGE/libraries/dev/nyx/nyx-loader/$VERSION/"
 mkdir -p "$STAGE/mods-examples"
 cp "$ROOT/examples/hello-nyx/target/hello-nyx-$VERSION.jar" "$STAGE/mods-examples/"
 cp "$ROOT/examples/session-timer/target/session-timer-$VERSION.jar" "$STAGE/mods-examples/"
+cp "$ROOT/examples/log-probe/target/log-probe-$VERSION.jar" "$STAGE/mods-examples/"
 
 (cd "$STAGE" && zip -qr "../Nyx-$VERSION-install.zip" versions libraries mods-examples)
 
