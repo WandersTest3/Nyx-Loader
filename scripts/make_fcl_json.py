@@ -8,7 +8,7 @@ import urllib.request
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 TWEAK_ARGS = " --tweakClass dev.nyx.loader.NyxTweaker"
 LAUNCH_MAIN = "net.minecraft.launchwrapper.Launch"
-REPO_URL = "https://github.com/WandersTest3/Nyx-Loader/releases/download/v{v}/nyx-loader-{v}.jar"
+REPO_URL = "https://raw.githubusercontent.com/WandersTest3/Nyx-Loader/v{v}/maven/dev/nyx/nyx-loader/{v}/nyx-loader-{v}.jar"
 
 LAUNCHWRAPPER = {
     "name": "net.minecraft:launchwrapper:1.12",
