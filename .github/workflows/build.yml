@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build
+        run: mvn -B -ntp package
+
+      - name: Package
+        run: |
+          VERSION="$(mvn -q -B -ntp -f nyx-loader/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          bash scripts/package-release.sh "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nyx-dist
+          path: dist/*
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "Nyx $GITHUB_REF_NAME" --generate-notes
