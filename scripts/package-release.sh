@@ -18,7 +18,7 @@ python3 "$ROOT/scripts/make_fcl_json.py" --mc "$MC" --nyx-version "$VERSION" --j
     --out "$STAGE/versions/$NAME/$NAME.json"
 cp "$JAR" "$STAGE/libraries/dev/nyx/nyx-loader/$VERSION/"
 
-for example in hello-nyx session-timer log-probe; do
+for example in hello-nyx session-timer log-probe fps-counter; do
     cp "$ROOT/examples/$example/target/$example-$VERSION.jar" "$STAGE/versions/$NAME/mods/"
 done
 

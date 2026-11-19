@@ -6,12 +6,14 @@
 
     <groupId>dev.nyx</groupId>
     <artifactId>nyx-parent</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
     <packaging>pom</packaging>
     <name>Nyx Parent</name>
 
     <modules>
+        <module>nyx-mc171-stubs</module>
         <module>nyx-loader</module>
+        <module>examples/fps-counter</module>
         <module>examples/hello-nyx</module>
         <module>examples/session-timer</module>
         <module>examples/log-probe</module>

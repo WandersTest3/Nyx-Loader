@@ -1,31 +1,131 @@
 package dev.nyx.loader;
 
+import dev.nyx.api.HudRenderer;
 import dev.nyx.api.Nyx;
+import dev.nyx.api.NyxConfig;
+import dev.nyx.api.NyxGraphics;
 import dev.nyx.api.NyxMod;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import net.minecraft.launchwrapper.LaunchClassLoader;
+import org.lwjgl.input.Keyboard;
 
 public final class NyxRuntime {
 
     private static final String METADATA_FILE = "nyx.mod.properties";
 
     private static final List<ModContainer> MODS = new ArrayList<ModContainer>();
+    private static final List<ModContainer> BUILTIN = new ArrayList<ModContainer>();
     private static final List<Runnable> TICK_LISTENERS = new CopyOnWriteArrayList<Runnable>();
+    private static final List<HudRenderer> HUD_LISTENERS = new CopyOnWriteArrayList<HudRenderer>();
+    private static final List<KeyBinding> KEYS = new CopyOnWriteArrayList<KeyBinding>();
 
     private static File gameDirectory = new File(".");
     private static LaunchClassLoader classLoader;
     private static boolean started;
+    private static volatile int fps;
+    private static volatile long frameTimeMillis;
 
     private NyxRuntime() {
+    }
+
+    static {
+        BUILTIN.add(new ModContainer("nyx", "Nyx Loader", Nyx.VERSION, null,
+                "Mod loader focado no cliente para Minecraft Java.", "Wanders_Test3",
+                "Mod Test3 License V1.0", "https://github.com/WandersTest3/Nyx-Loader",
+                "https://github.com/WandersTest3/Nyx-Loader/issues", "classpath:/assets/nyx/icon.png", null, true));
+        BUILTIN.add(new ModContainer("minecraft", "Minecraft", Nyx.MINECRAFT_VERSION, null,
+                "Minecraft Java Edition " + Nyx.MINECRAFT_VERSION + ".", "Mojang Studios", null, null, null,
+                null, null, true));
+    }
+
+    public static List<ModContainer> getMods() {
+        return Collections.unmodifiableList(MODS);
+    }
+
+    public static List<ModContainer> getBuiltinEntries() {
+        return Collections.unmodifiableList(BUILTIN);
+    }
+
+    public static LaunchClassLoader getClassLoader() {
+        return classLoader;
+    }
+
+    public static boolean isStarted() {
+        return started;
+    }
+
+    public static int getFps() {
+        return fps;
+    }
+
+    public static long getFrameTimeMillis() {
+        return frameTimeMillis;
+    }
+
+    public static void updateFrameStats(int newFps, long newFrameTimeMillis) {
+        fps = newFps;
+        frameTimeMillis = newFrameTimeMillis;
+    }
+
+    public static void registerHudRenderer(HudRenderer renderer) {
+        if (renderer == null) {
+            throw new IllegalArgumentException("renderer");
+        }
+        HUD_LISTENERS.add(renderer);
+    }
+
+    public static boolean hasHudRenderers() {
+        return !HUD_LISTENERS.isEmpty();
+    }
+
+    public static void renderHud(NyxGraphics graphics) {
+        for (HudRenderer renderer : HUD_LISTENERS) {
+            try {
+                renderer.render(graphics);
+            } catch (Throwable error) {
+                HUD_LISTENERS.remove(renderer);
+                log("HUD renderer removed after error: " + error);
+                error.printStackTrace();
+            }
+        }
+    }
+
+    public static void registerKey(String modId, String name, int defaultKey, Runnable action) {
+        if (modId == null || name == null || action == null) {
+            throw new IllegalArgumentException("modId, name and action are required");
+        }
+        NyxConfig keys = Nyx.getConfig("keys");
+        String configKey = modId + "." + name;
+        String configured = keys.get(configKey, null);
+        int key = defaultKey;
+        if (configured != null) {
+            int parsed = Keyboard.getKeyIndex(configured);
+            if (parsed == Keyboard.KEY_NONE) {
+                try {
+                    parsed = Integer.parseInt(configured);
+                } catch (NumberFormatException error) {
+                    parsed = defaultKey;
+                }
+            }
+            key = parsed;
+        } else {
+            keys.set(configKey, Keyboard.getKeyName(defaultKey)).save();
+        }
+        KEYS.add(new KeyBinding(modId, name, key, action));
+    }
+
+    public static List<KeyBinding> getKeyBindings() {
+        return KEYS;
     }
 
     public static File getGameDirectory() {
@@ -133,7 +233,9 @@ public final class NyxRuntime {
             String name = value(properties, "name");
             String version = value(properties, "version");
             loader.addURL(file.toURI().toURL());
-            MODS.add(new ModContainer(id, name != null ? name : id, version != null ? version : "unknown", entrypoint, file));
+            MODS.add(new ModContainer(id, name != null ? name : id, version != null ? version : "unknown", entrypoint,
+                    value(properties, "description"), value(properties, "authors"), value(properties, "license"),
+                    value(properties, "website"), value(properties, "issues"), value(properties, "icon"), file, false));
         } catch (IOException error) {
             log("Skipping " + file.getName() + ": " + error);
         }
