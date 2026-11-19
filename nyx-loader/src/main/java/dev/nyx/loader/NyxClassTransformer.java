@@ -13,13 +13,13 @@ import org.objectweb.asm.tree.MethodNode;
 
 public class NyxClassTransformer implements IClassTransformer {
 
-    private static final String MINECRAFT_CLASS = "net.minecraft.client.Minecraft";
+    private static final String MINECRAFT_CLASS = "bao";
     private static final String HOOKS = "dev/nyx/loader/Hooks";
 
-    private static final String INIT_METHOD = "a";
-    private static final String INIT_MARKER = "/font/default.png";
-    private static final String TICK_METHOD = "k";
-    private static final String TICK_MARKER = "centerChunkSource";
+    private static final String INIT_METHOD = "ag";
+    private static final String INIT_MARKER = "Pre startup";
+    private static final String TICK_METHOD = "p";
+    private static final String TICK_MARKER = "Ticking screen";
 
     @Override
     public byte[] transform(String name, String transformedName, byte[] bytes) {

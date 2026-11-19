@@ -7,7 +7,7 @@
     <parent>
         <groupId>dev.nyx</groupId>
         <artifactId>nyx-parent</artifactId>
-        <version>0.0.1</version>
+        <version>0.0.2</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -18,13 +18,13 @@
         <dependency>
             <groupId>net.minecraft</groupId>
             <artifactId>launchwrapper</artifactId>
-            <version>1.5</version>
+            <version>1.12</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-all</artifactId>
-            <version>4.1</version>
+            <version>5.0.3</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
