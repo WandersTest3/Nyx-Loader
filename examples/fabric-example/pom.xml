@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.nyx</groupId>
+        <artifactId>nyx-parent</artifactId>
+        <version>0.0.4</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>fabric-example</artifactId>
+    <name>Nyx Fabric Example</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.nyx</groupId>
+            <artifactId>nyx-loader</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.nyx</groupId>
+            <artifactId>nyx-mc171-stubs</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.fabricmc</groupId>
+            <artifactId>sponge-mixin</artifactId>
+            <version>0.17.5+mixin.0.8.7</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <proc>none</proc>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

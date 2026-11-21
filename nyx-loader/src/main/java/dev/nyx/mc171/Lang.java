@@ -28,7 +28,8 @@ public final class Lang {
         put("license", "Licen\u00e7a:", "License:");
         put("credits", "Cr\u00e9ditos:", "Credits:");
         put("authors", "Autores:", "Authors:");
-        put("client", "Cliente", "Client");
+        put("client", "Nyx", "Nyx");
+        put("fabric", "Fabric", "Fabric");
         put("library", "Biblioteca", "Library");
         put("empty", "Nenhum mod encontrado", "No mods found");
         put("hint", "Coloque arquivos .jar na pasta mods", "Put .jar files in the mods folder");

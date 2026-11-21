@@ -6,33 +6,32 @@ import os
 import urllib.request
 
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
-TWEAK_ARGS = " --tweakClass dev.nyx.loader.NyxTweaker"
-LAUNCH_MAIN = "net.minecraft.launchwrapper.Launch"
+LAUNCH_MAIN = "dev.nyx.loader.launch.NyxMain"
+JAVA_MAJOR = 21
 REPO_URL = "https://raw.githubusercontent.com/WandersTest3/Nyx-Loader/v{v}/maven/dev/nyx/nyx-loader/{v}/nyx-loader-{v}.jar"
 
-LAUNCHWRAPPER = {
-    "name": "net.minecraft:launchwrapper:1.12",
-    "downloads": {
-        "artifact": {
-            "path": "net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar",
-            "sha1": "111e7bea9c968cdb3d06ef4632bf7ff0824d0f36",
-            "size": 32999,
-            "url": "https://libraries.minecraft.net/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar",
-        }
-    },
-}
+CENTRAL = "https://repo1.maven.org/maven2/"
+FABRIC = "https://maven.fabricmc.net/"
+LEGACY_FABRIC = "https://repo.legacyfabric.net/legacyfabric/"
 
-ASM = {
-    "name": "org.ow2.asm:asm-all:5.0.3",
-    "downloads": {
-        "artifact": {
-            "path": "org/ow2/asm/asm-all/5.0.3/asm-all-5.0.3.jar",
-            "sha1": "4333508b8dd8ee72aa4e39afa713b3a74579b773",
-            "size": 241639,
-            "url": "https://repo1.maven.org/maven2/org/ow2/asm/asm-all/5.0.3/asm-all-5.0.3.jar",
-        }
-    },
-}
+LIBRARIES = [
+    ("org.ow2.asm:asm:9.8", CENTRAL, "dc19ecb3f7889b7860697215cae99c0f9b6f6b4b", 126113),
+    ("org.ow2.asm:asm-tree:9.8", CENTRAL, "018419ca5b77a2f81097c741e7872e6ab8d2f40d", 51934),
+    ("org.ow2.asm:asm-commons:9.8", CENTRAL, "36e4d212970388e5bd2c5180292012502df461bb", 73498),
+    ("org.ow2.asm:asm-util:9.8", CENTRAL, "395f1c1f035258511f27bc9b2583d76e4b143f59", 94559),
+    ("org.ow2.asm:asm-analysis:9.8", CENTRAL, "b9747a320844b6cb1eacd90d8ecfd260a16c01d3", 35151),
+    ("net.fabricmc:sponge-mixin:0.17.5+mixin.0.8.7", FABRIC, "0cef8519a91129d0c21fa03bb9378f0e8ca810e5", 1551593),
+    ("net.legacyfabric:intermediary:1.7.10", LEGACY_FABRIC, "101f7a07dd6adfd26b1e180a13235104b6d954ae", 113936),
+]
+
+
+def maven_library(name, repo, sha1, size):
+    group, artifact, version = name.split(":")
+    path = "{}/{}/{}/{}-{}.jar".format(group.replace(".", "/"), artifact, version, artifact, version)
+    return {
+        "name": name,
+        "downloads": {"artifact": {"path": path, "sha1": sha1, "size": size, "url": repo + path}},
+    }
 
 
 def fetch_json(url):
@@ -69,8 +68,9 @@ def main():
     base = fetch_json(entry["url"])
 
     name = "Nyx-" + args.mc
-    libraries = [LAUNCHWRAPPER, ASM, nyx_library(args.jar, args.nyx_version)]
-    arguments = base["minecraftArguments"] + TWEAK_ARGS
+    libraries = [nyx_library(args.jar, args.nyx_version)] + [maven_library(*lib) for lib in LIBRARIES]
+    arguments = base["minecraftArguments"]
+    java = {"component": "java-runtime-delta", "majorVersion": JAVA_MAJOR}
 
     game_patch = copy.deepcopy(base)
     game_patch.update({"id": "game", "version": args.mc, "priority": 0})
@@ -82,6 +82,7 @@ def main():
         "libraries": libraries,
         "mainClass": LAUNCH_MAIN,
         "minecraftArguments": arguments,
+        "javaVersion": java,
         "releaseTime": base["releaseTime"],
         "time": base["time"],
         "type": base["type"],
@@ -96,6 +97,7 @@ def main():
             "libraries": libraries + base["libraries"],
             "mainClass": LAUNCH_MAIN,
             "minecraftArguments": arguments,
+            "javaVersion": java,
             "patches": [game_patch, nyx_patch],
         }
     )

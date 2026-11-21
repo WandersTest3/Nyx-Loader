@@ -16,9 +16,10 @@ public final class ModContainer {
     public final String iconPath;
     public final File file;
     public final boolean library;
+    public final String kind;
 
-    ModContainer(String id, String name, String version, String entrypoint, String description, String authors,
-            String license, String website, String issues, String iconPath, File file, boolean library) {
+    public ModContainer(String id, String name, String version, String entrypoint, String description, String authors,
+            String license, String website, String issues, String iconPath, File file, boolean library, String kind) {
         this.id = id;
         this.name = name;
         this.version = version;
@@ -31,5 +32,6 @@ public final class ModContainer {
         this.iconPath = iconPath;
         this.file = file;
         this.library = library;
+        this.kind = kind;
     }
 }

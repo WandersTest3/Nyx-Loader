@@ -9,14 +9,17 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
-import net.minecraft.launchwrapper.LaunchClassLoader;
+import dev.nyx.loader.fabric.FabricModContainer;
+import dev.nyx.loader.fabric.NyxFabricLoader;
+import dev.nyx.loader.launch.NyxClassLoader;
+import net.fabricmc.loader.api.metadata.ModMetadata;
+import net.fabricmc.loader.api.metadata.Person;
 import org.lwjgl.input.Keyboard;
 
 public final class NyxRuntime {
@@ -30,7 +33,7 @@ public final class NyxRuntime {
     private static final List<KeyBinding> KEYS = new CopyOnWriteArrayList<KeyBinding>();
 
     private static File gameDirectory = new File(".");
-    private static LaunchClassLoader classLoader;
+    private static NyxClassLoader classLoader;
     private static boolean started;
     private static volatile int fps;
     private static volatile long frameTimeMillis;
@@ -42,10 +45,19 @@ public final class NyxRuntime {
         BUILTIN.add(new ModContainer("nyx", "Nyx Loader", Nyx.VERSION, null,
                 "Mod loader focado no cliente para Minecraft Java.", "Wanders_Test3",
                 "Mod Test3 License V1.0", "https://github.com/WandersTest3/Nyx-Loader",
-                "https://github.com/WandersTest3/Nyx-Loader/issues", "classpath:/assets/nyx/icon.png", null, true));
+                "https://github.com/WandersTest3/Nyx-Loader/issues", "classpath:/assets/nyx/icon.png", null, true,
+                "builtin"));
         BUILTIN.add(new ModContainer("minecraft", "Minecraft", Nyx.MINECRAFT_VERSION, null,
                 "Minecraft Java Edition " + Nyx.MINECRAFT_VERSION + ".", "Mojang Studios", null, null, null,
-                null, null, true));
+                null, null, true, "builtin"));
+        BUILTIN.add(new ModContainer("fabricloader", "Fabric Loader (Nyx)", NyxFabricLoader.FABRIC_LOADER_VERSION,
+                null, "Camada do Nyx compativel com mods Fabric (mapeamentos intermediary do Legacy Fabric).",
+                "Wanders_Test3", "Mod Test3 License V1.0", "https://github.com/WandersTest3/Nyx-Loader",
+                "https://github.com/WandersTest3/Nyx-Loader/issues", "classpath:/assets/nyx/icon.png", null, true,
+                "builtin"));
+        BUILTIN.add(new ModContainer("java", "Java", System.getProperty("java.version"), null,
+                System.getProperty("java.vm.name") + " (" + System.getProperty("java.vendor") + ")", null, null,
+                null, null, null, null, true, "builtin"));
     }
 
     public static List<ModContainer> getMods() {
@@ -56,7 +68,57 @@ public final class NyxRuntime {
         return Collections.unmodifiableList(BUILTIN);
     }
 
-    public static LaunchClassLoader getClassLoader() {
+    private static final List<ModContainer> FABRIC = new ArrayList<ModContainer>();
+
+    public static void setFabricMods(List<FabricModContainer> mods) {
+        FABRIC.clear();
+        for (FabricModContainer mod : mods) {
+            if (mod.isBuiltin()) {
+                continue;
+            }
+            ModMetadata meta = mod.getMetadata();
+            List<String> authors = new ArrayList<String>();
+            for (Person person : meta.getAuthors()) {
+                authors.add(person.getName());
+            }
+            boolean library = mod.isNested() || isLibraryBadge(mod);
+            FABRIC.add(new ModContainer(meta.getId(), meta.getName(), meta.getVersion().getFriendlyString(), null,
+                    meta.getDescription().isEmpty() ? null : meta.getDescription(),
+                    authors.isEmpty() ? null : String.join(", ", authors),
+                    meta.getLicense().isEmpty() ? null : String.join(", ", meta.getLicense()),
+                    meta.getContact().get("homepage").orElse(null), meta.getContact().get("issues").orElse(null),
+                    meta.getIconPath(64).orElse(null), mod.getJarPath() == null ? null : mod.getJarPath().toFile(),
+                    library, "fabric"));
+        }
+    }
+
+    private static boolean isLibraryBadge(FabricModContainer mod) {
+        try {
+            net.fabricmc.loader.api.metadata.CustomValue modmenu = mod.getMetadata().getCustomValue("modmenu");
+            if (modmenu == null || modmenu.getType() != net.fabricmc.loader.api.metadata.CustomValue.CvType.OBJECT) {
+                return false;
+            }
+            net.fabricmc.loader.api.metadata.CustomValue badges = modmenu.getAsObject().get("badges");
+            if (badges == null || badges.getType() != net.fabricmc.loader.api.metadata.CustomValue.CvType.ARRAY) {
+                return false;
+            }
+            for (net.fabricmc.loader.api.metadata.CustomValue badge : badges.getAsArray()) {
+                if (badge.getType() == net.fabricmc.loader.api.metadata.CustomValue.CvType.STRING
+                        && "library".equals(badge.getAsString())) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+        return false;
+    }
+
+    public static List<ModContainer> getFabricEntries() {
+        return Collections.unmodifiableList(FABRIC);
+    }
+
+    public static NyxClassLoader getClassLoader() {
         return classLoader;
     }
 
@@ -137,6 +199,13 @@ public final class NyxRuntime {
     }
 
     public static boolean isModLoaded(String id) {
+        if (isNyxModLoaded(id)) {
+            return true;
+        }
+        return NyxFabricLoader.isReady() && NyxFabricLoader.get().getModContainer(id).isPresent();
+    }
+
+    public static boolean isNyxModLoaded(String id) {
         for (ModContainer mod : MODS) {
             if (mod.id.equals(id)) {
                 return true;
@@ -156,30 +225,22 @@ public final class NyxRuntime {
         System.out.println("[Nyx] " + message);
     }
 
-    static void setGameDirectory(File directory) {
+    public static void setGameDirectory(File directory) {
         if (directory != null) {
             gameDirectory = directory;
         }
     }
 
-    static void discoverMods(LaunchClassLoader loader) {
+    public static void setClassLoader(NyxClassLoader loader) {
         classLoader = loader;
-        File directory = getModsDirectory();
-        if (!directory.isDirectory() && !directory.mkdirs()) {
-            log("Could not create mods directory: " + directory);
-            return;
+    }
+
+    public static boolean isNyxModJar(File file) {
+        try (JarFile jar = new JarFile(file)) {
+            return jar.getEntry(METADATA_FILE) != null;
+        } catch (IOException error) {
+            return false;
         }
-        File[] files = directory.listFiles();
-        if (files == null) {
-            return;
-        }
-        Arrays.sort(files);
-        for (File file : files) {
-            if (file.isFile() && file.getName().toLowerCase().endsWith(".jar")) {
-                readMod(file, loader);
-            }
-        }
-        log(MODS.size() + " mod(s) found in " + directory);
     }
 
     public static void start() {
@@ -205,7 +266,7 @@ public final class NyxRuntime {
         }
     }
 
-    private static void readMod(File file, LaunchClassLoader loader) {
+    public static void readMod(File file, NyxClassLoader loader) {
         try (JarFile jar = new JarFile(file)) {
             ZipEntry entry = jar.getEntry(METADATA_FILE);
             if (entry == null) {
@@ -226,7 +287,7 @@ public final class NyxRuntime {
                 log("Skipping " + file.getName() + ": missing entrypoint");
                 return;
             }
-            if (isModLoaded(id)) {
+            if (isNyxModLoaded(id)) {
                 log("Skipping " + file.getName() + ": duplicate mod id " + id);
                 return;
             }
@@ -235,7 +296,7 @@ public final class NyxRuntime {
             loader.addURL(file.toURI().toURL());
             MODS.add(new ModContainer(id, name != null ? name : id, version != null ? version : "unknown", entrypoint,
                     value(properties, "description"), value(properties, "authors"), value(properties, "license"),
-                    value(properties, "website"), value(properties, "issues"), value(properties, "icon"), file, false));
+                    value(properties, "website"), value(properties, "issues"), value(properties, "icon"), file, false, "nyx"));
         } catch (IOException error) {
             log("Skipping " + file.getName() + ": " + error);
         }
@@ -243,7 +304,7 @@ public final class NyxRuntime {
 
     private static void initialize(ModContainer mod) {
         try {
-            Object instance = Class.forName(mod.entrypoint, true, classLoader).newInstance();
+            Object instance = Class.forName(mod.entrypoint, true, classLoader).getDeclaredConstructor().newInstance();
             if (!(instance instanceof NyxMod)) {
                 log("Mod " + mod.id + " entrypoint does not implement dev.nyx.api.NyxMod");
                 return;

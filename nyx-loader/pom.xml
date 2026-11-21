@@ -7,7 +7,7 @@
     <parent>
         <groupId>dev.nyx</groupId>
         <artifactId>nyx-parent</artifactId>
-        <version>0.0.3</version>
+        <version>0.0.4</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -27,16 +27,29 @@
             <version>2.9.1</version>
             <scope>provided</scope>
         </dependency>
+
         <dependency>
-            <groupId>net.minecraft</groupId>
-            <artifactId>launchwrapper</artifactId>
-            <version>1.12</version>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+            <version>9.8</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-all</artifactId>
-            <version>5.0.3</version>
+            <artifactId>asm-tree</artifactId>
+            <version>9.8</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+            <version>9.8</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.fabricmc</groupId>
+            <artifactId>sponge-mixin</artifactId>
+            <version>0.17.5+mixin.0.8.7</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

@@ -4,22 +4,28 @@
 
 Mod loader client-side para Minecraft Java Edition. Em desenvolvimento.
 
-**Versão atual: 0.0.3** — suporta apenas o Minecraft **1.7.10**, com **Java 8**.
+**Versão atual: 0.0.4**: Minecraft **1.7.10**, **Java 21**, mods do Nyx e mods **Fabric** (mapeamentos intermediary do Legacy Fabric).
 
 ## Como funciona
 
-O Nyx roda sobre o LaunchWrapper 1.12 (`net.minecraft.launchwrapper.Launch`), o mesmo mecanismo usado pelo Forge nessa versão.
+Desde a 0.0.4 o Nyx tem lançador próprio e não usa mais o LaunchWrapper.
 
-1. O launcher inicia o jogo com `net.minecraft.launchwrapper.Launch` e `--tweakClass dev.nyx.loader.NyxTweaker`.
-2. O `NyxTweaker` registra o transformador de bytecode, procura mods em `<pasta do jogo>/mods/*.jar` e repassa a execução para `net.minecraft.client.main.Main`.
-3. O `NyxClassTransformer` injeta hooks usando ASM:
-   - `bao.ag()V` (fim da inicialização): inicializa os mods;
-   - `bao.p()V` (início de cada tick do cliente): tick listeners;
-   - `bao.g()V` (antes de `Display.update()`): fim de cada frame, usado para o HUD, as teclas e o FPS;
-   - `bee` (menu principal): desenha e trata o clique do botão do ModMenu.
-4. Se os métodos esperados não forem encontrados (outro build do jogo), o hook não é aplicado e um aviso aparece no log.
+1. O launcher inicia `dev.nyx.loader.launch.NyxMain` com Java 21.
+2. Na primeira vez, o Nyx remapeia o `client.jar` dos nomes ofuscados para os nomes **intermediary** do Legacy Fabric (`net.minecraft.class_1600`, `method_2921`...). O resultado fica em `<pasta do jogo>/.nyx/remapped/` e é reutilizado.
+3. Um classloader próprio (`NyxClassLoader`) carrega o jogo remapeado e os mods. Cada classe passa por: patches do Nyx (ASM), access wideners, remoção de código `@Environment(SERVER)` e Mixin.
+4. Patches do Nyx no jogo:
+   - `class_1600.method_2921` (inicialização): entrypoints Fabric `main`/`client` antes da criação da janela e mods do Nyx no fim;
+   - `class_1600.method_2954` (tick) e `method_6648` (antes de `Display.update()`, HUD, teclas e FPS);
+   - `class_624` (menu principal): botão do ModMenu;
+   - `ClientBrandRetriever`: marca `nyx`.
 
-Os nomes ofuscados acima foram verificados no `client.jar` do Minecraft 1.7.10 (sha1 `e80d9b3bf5085002218d4be59e668bac718abbc6`).
+## Compatibilidade com Fabric
+
+- Lê `fabric.mod.json` (schema 1): entrypoints `preLaunch`, `main`, `client` (classe, `Classe::campo` ou `Classe::método`), `languageAdapters`, `mixins`, `accessWidener`, `jars` (jar-in-jar), `depends`/`recommends`/`suggests`/`breaks`/`conflicts`, `provides`, `environment`, `icon`, `contact`, `custom`.
+- API `net.fabricmc.loader.api` (`FabricLoader`, `ModContainer`, `ModMetadata`, `Version`, `SemanticVersion`, `VersionPredicate`, `MappingResolver`, `ObjectShare`, entrypoints) e `net.fabricmc.api`. A implementação é do Nyx, com as mesmas assinaturas.
+- Mixin: Fabric Mixin 0.17.5 (Mixin 0.8.7) e MixinExtras 0.5.5 (embutido no jar do Nyx). O Nyx se apresenta como `fabricloader` 0.20.1.
+- Mods suportados: os feitos para **Minecraft 1.7.10 com Legacy Fabric** (mesmos nomes intermediary), incluindo a Legacy Fabric API. Mods Fabric de versões modernas não funcionam, porque as classes do jogo são outras.
+- Se faltar uma dependência, o jogo não abre e o log mostra a lista dos problemas, por exemplo `keyyyyyyyy 3.2.0 requires java >=25, but found 21`.
 
 ## Criando um mod
 
@@ -67,7 +73,7 @@ public class MeuMod implements NyxMod {
 }
 ```
 
-API da 0.0.3 (`dev.nyx.api.Nyx`):
+API do Nyx (`dev.nyx.api.Nyx`):
 
 | Método | O que faz |
 | --- | --- |
@@ -95,14 +101,15 @@ O Nyx adiciona um botão com o ícone do osso no canto superior direito do menu 
 - `examples/session-timer`: mostra o tempo de sessão no título da janela, atualizado pelo hook de tick.
 - `examples/fps-counter`: mostra FPS e tempo do quadro no canto da tela com `onHud`. **F6** liga e desliga; `config/nyx/fps-counter.properties` define o canto (`top-left`, `top-right`, `bottom-left`, `bottom-right`), o fundo e o tempo do quadro.
 - `examples/log-probe`: cria `logs/nyx-probe.log` na pasta do jogo (versão, Java, pasta e ticks), útil para confirmar que o Nyx está rodando.
+- `examples/fabric-example`: mod **Fabric** com `ClientModInitializer`, um Mixin no menu principal (`class_624.method_1025`) e um access widener (`class_1600.field_3787`, o FPS interno do jogo). Serve de modelo para mods Fabric no Nyx.
 
 ## Compilar
 
-Requer JDK 17 ou superior, Maven e Python 3.
+Requer JDK 21 ou superior, Maven e Python 3.
 
 ```
 mvn package
-bash scripts/package-release.sh 0.0.3
+bash scripts/package-release.sh 0.0.4
 ```
 
 A saída fica em `dist/`. O GitHub Actions faz o mesmo a cada push e, ao enviar uma tag `v*`, publica um Release.
@@ -110,20 +117,21 @@ A saída fica em `dist/`. O GitHub Actions faz o mesmo a cada push e, ao enviar 
 ## Instalar no Fold Craft Launcher (FCL)
 
 1. No FCL, instale o Minecraft **1.7.10** normal com o nome **Nyx-1.7.10** e abra-o uma vez.
-2. Baixe `Nyx-0.0.3-install.zip` (Releases) ou `Nyx-1.7.10.json` (pasta `dist/`).
-3. Extraia o zip na pasta do jogo do FCL (a que contém `versions` e `libraries`), mesclando as pastas e substituindo o `Nyx-1.7.10.json`.
-4. Atualize a lista de versões, selecione **Nyx-1.7.10** e use Java 8.
-5. Os mods de exemplo vão para `versions/Nyx-1.7.10/mods` (versão isolada). Sem isolamento, copie para `mods/` na raiz.
-6. Procure linhas começando com `[Nyx]` no log, ou o arquivo `logs/nyx-probe.log`.
+2. Copie `Nyx-1.7.10.json` (pasta `dist/`) para `versions/Nyx-1.7.10/`, substituindo o original.
+3. Nas configurações da versão, escolha **Java 21**.
+4. Coloque mods do Nyx e mods Fabric (Legacy Fabric 1.7.10) em `versions/Nyx-1.7.10/mods` (versão isolada).
+5. O FCL baixa sozinho `nyx-loader`, ASM 9.8, Fabric Mixin e os mapeamentos intermediary 1.7.10 do Legacy Fabric.
+6. No log procure `[Nyx] Nyx Loader 0.0.4` e a lista de mods carregados.
 
-O `Nyx-1.7.10.json` usa o formato do FCL: a versão vanilla fica no patch `game` e o Nyx (LaunchWrapper, ASM e `nyx-loader`) no patch `nyx`, com `mainClass` `net.minecraft.launchwrapper.Launch` e `--tweakClass dev.nyx.loader.NyxTweaker` nos argumentos.
+O `Nyx-1.7.10.json` tem a versão vanilla no patch `game` e o Nyx no patch `nyx` (`mainClass` `dev.nyx.loader.launch.NyxMain`, `javaVersion` 21).
 
-## Limitações da 0.0.3
+## Limitações da 0.0.4
 
 - Somente Minecraft 1.7.10 e somente cliente.
-- Sem camada de mapeamentos: as classes do Minecraft continuam ofuscadas. O HUD e o ModMenu usam OpenGL (LWJGL) e a fonte do jogo.
-- Sem verificação de dependências entre mods.
-- Testado em Linux com Java 8 (incluindo cliques simulados no ModMenu); em launchers Android o teste da 0.0.2 passou, o da 0.0.3 ainda não.
+- Precisa de Java 21 ou mais novo.
+- Mods Fabric precisam ser feitos para 1.7.10 (Legacy Fabric). Mods para outras versões são recusados pelo `depends` ou falham ao carregar.
+- Resolução de dependências simplificada: em cada id fica a maior versão compatível. Mods dentro de outros (jar-in-jar) que não servem para 1.7.10 são ignorados.
+- Testado em Linux com Java 21: Legacy Fabric API 1.13.5, Omnilook, MenuFPSUnlocker, Exit Confirmation, Legacy Fixes e Perspective Nametag carregaram e um mundo foi criado. Em launchers Android ainda não foi testado.
 
 ## Licença
 
@@ -132,3 +140,8 @@ Veja `License.txt`.
 ## Biblioteca no repositório
 
 O JSON do FCL baixa `nyx-loader` de `maven/dev/nyx/nyx-loader/<versão>/` (via `raw.githubusercontent.com`, branch `v<versão>`), então essas branches precisam continuar existindo.
+
+## Bibliotecas de terceiros
+
+- MixinExtras 0.5.5 (MIT), embutido em `META-INF/jars`, com a licença dentro do jar.
+- Fabric Mixin, ASM e os mapeamentos intermediary do Legacy Fabric são baixados pelo launcher a partir dos repositórios oficiais; não são redistribuídos aqui.

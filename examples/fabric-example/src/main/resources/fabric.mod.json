@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "nyx-fabric-example",
+  "version": "0.0.4",
+  "name": "Nyx Fabric Example",
+  "description": "Mod Fabric de exemplo: escreve um texto com o FPS no menu principal usando Mixin e um access widener.",
+  "authors": ["Wanders_Test3"],
+  "contact": {
+    "homepage": "https://github.com/WandersTest3/Nyx-Loader",
+    "issues": "https://github.com/WandersTest3/Nyx-Loader/issues"
+  },
+  "license": "Mod Test3 License V1.0",
+  "icon": "assets/nyx-fabric-example/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.nyx.example.fabric.FabricExample"]
+  },
+  "mixins": ["nyx-fabric-example.mixins.json"],
+  "accessWidener": "nyx-fabric-example.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "1.7.10",
+    "java": ">=21"
+  }
+}

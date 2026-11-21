@@ -1,0 +1,200 @@
+package dev.nyx.loader.launch;
+
+import dev.nyx.loader.NyxRuntime;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.LabelNode;
+import org.objectweb.asm.tree.LdcInsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.VarInsnNode;
+
+final class GamePatcher {
+
+    private static final String MINECRAFT = "net/minecraft/class_1600";
+    private static final String MAIN_MENU = "net/minecraft/class_624";
+    private static final String SCREEN = "net/minecraft/class_388";
+    private static final String BRAND = "net/minecraft/client/ClientBrandRetriever";
+    private static final String HOOKS = "dev/nyx/loader/Hooks";
+    private static final String FRAME = "dev/nyx/mc171/NyxFrame";
+    private static final String MENU = "dev/nyx/mc171/NyxMenuHook";
+
+    private static final String INIT = "method_2921";
+    private static final String INIT_MARKER = "Pre startup";
+    private static final String LWJGL_MARKER = "LWJGL Version: ";
+    private static final String TICK = "method_2954";
+    private static final String TICK_MARKER = "Ticking screen";
+    private static final String FRAME_METHOD = "method_6648";
+    private static final String DRAW = "method_1025";
+    private static final String CLICK = "method_1026";
+
+    private GamePatcher() {
+    }
+
+    static byte[] transform(String name, byte[] bytes) {
+        if (bytes == null) {
+            return null;
+        }
+        try {
+            switch (name) {
+                case MINECRAFT:
+                    return patchMinecraft(bytes);
+                case MAIN_MENU:
+                    return patchMainMenu(bytes);
+                case BRAND:
+                    return patchBrand(bytes);
+                default:
+                    return bytes;
+            }
+        } catch (RuntimeException error) {
+            NyxRuntime.log("Failed to patch " + name + ": " + error);
+            return bytes;
+        }
+    }
+
+    private static ClassNode read(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        return node;
+    }
+
+    private static byte[] write(ClassNode node) {
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private static byte[] patchMinecraft(byte[] bytes) {
+        ClassNode node = read(bytes);
+        boolean init = false;
+        boolean fabric = false;
+        boolean tick = false;
+        boolean frame = false;
+        for (MethodNode method : node.methods) {
+            if (!"()V".equals(method.desc)) {
+                continue;
+            }
+            if (INIT.equals(method.name) && constant(method, INIT_MARKER) != null) {
+                for (AbstractInsnNode insn : method.instructions.toArray()) {
+                    if (insn.getOpcode() == Opcodes.RETURN) {
+                        method.instructions.insertBefore(insn, call(HOOKS, "onGameStart", "()V"));
+                    }
+                }
+                init = true;
+                AbstractInsnNode lwjgl = constant(method, LWJGL_MARKER);
+                if (lwjgl != null) {
+                    AbstractInsnNode target = lwjgl;
+                    while (target != null && !(target instanceof FieldInsnNode && target.getOpcode() == Opcodes.GETSTATIC)) {
+                        target = target.getPrevious();
+                    }
+                    if (target == null) {
+                        target = lwjgl;
+                    }
+                    InsnList list = new InsnList();
+                    list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HOOKS, "startFabricClient", "(Ljava/lang/Object;)V", false));
+                    method.instructions.insertBefore(target, list);
+                    fabric = true;
+                }
+            } else if (TICK.equals(method.name) && constant(method, TICK_MARKER) != null) {
+                method.instructions.insert(call(HOOKS, "onClientTick", "()V"));
+                tick = true;
+            } else if (FRAME_METHOD.equals(method.name) && startsWithDisplayUpdate(method)) {
+                method.instructions.insert(call(FRAME, "onFrame", "()V"));
+                frame = true;
+            }
+        }
+        if (!init || !fabric || !tick || !frame) {
+            NyxRuntime.log("Minecraft hooks: init=" + init + " fabric=" + fabric + " tick=" + tick + " frame=" + frame);
+        }
+        return write(node);
+    }
+
+    private static byte[] patchMainMenu(byte[] bytes) {
+        ClassNode node = read(bytes);
+        boolean draw = false;
+        boolean click = false;
+        for (MethodNode method : node.methods) {
+            if (DRAW.equals(method.name) && "(IIF)V".equals(method.desc)) {
+                for (AbstractInsnNode insn : method.instructions.toArray()) {
+                    if (insn.getOpcode() == Opcodes.RETURN) {
+                        InsnList list = new InsnList();
+                        list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        list.add(new VarInsnNode(Opcodes.ILOAD, 1));
+                        list.add(new VarInsnNode(Opcodes.ILOAD, 2));
+                        list.add(new VarInsnNode(Opcodes.FLOAD, 3));
+                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "draw", "(L" + SCREEN + ";IIF)V", false));
+                        method.instructions.insertBefore(insn, list);
+                    }
+                }
+                draw = true;
+            } else if (CLICK.equals(method.name) && "(III)V".equals(method.desc)) {
+                InsnList list = new InsnList();
+                LabelNode proceed = new LabelNode();
+                list.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                list.add(new VarInsnNode(Opcodes.ILOAD, 1));
+                list.add(new VarInsnNode(Opcodes.ILOAD, 2));
+                list.add(new VarInsnNode(Opcodes.ILOAD, 3));
+                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "click", "(L" + SCREEN + ";III)Z", false));
+                list.add(new JumpInsnNode(Opcodes.IFEQ, proceed));
+                list.add(new InsnNode(Opcodes.RETURN));
+                list.add(proceed);
+                method.instructions.insert(list);
+                click = true;
+            }
+        }
+        if (!draw || !click) {
+            NyxRuntime.log("Mod menu button not installed: draw=" + draw + " click=" + click);
+        }
+        return write(node);
+    }
+
+    private static byte[] patchBrand(byte[] bytes) {
+        ClassNode node = read(bytes);
+        for (MethodNode method : node.methods) {
+            if ("()Ljava/lang/String;".equals(method.desc) && (method.access & Opcodes.ACC_STATIC) != 0) {
+                for (AbstractInsnNode insn : method.instructions.toArray()) {
+                    if (insn.getOpcode() == Opcodes.ARETURN) {
+                        method.instructions.insertBefore(insn,
+                                call(HOOKS, "insertBranding", "(Ljava/lang/String;)Ljava/lang/String;"));
+                    }
+                }
+            }
+        }
+        return write(node);
+    }
+
+    private static InsnList call(String owner, String name, String desc) {
+        InsnList list = new InsnList();
+        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, owner, name, desc, false));
+        return list;
+    }
+
+    private static AbstractInsnNode constant(MethodNode method, String value) {
+        for (AbstractInsnNode insn : method.instructions.toArray()) {
+            if (insn instanceof LdcInsnNode && value.equals(((LdcInsnNode) insn).cst)) {
+                return insn;
+            }
+        }
+        return null;
+    }
+
+    private static boolean startsWithDisplayUpdate(MethodNode method) {
+        for (AbstractInsnNode insn : method.instructions.toArray()) {
+            if (insn.getOpcode() < 0) {
+                continue;
+            }
+            return insn instanceof MethodInsnNode && insn.getOpcode() == Opcodes.INVOKESTATIC
+                    && "org/lwjgl/opengl/Display".equals(((MethodInsnNode) insn).owner)
+                    && "update".equals(((MethodInsnNode) insn).name);
+        }
+        return false;
+    }
+}
