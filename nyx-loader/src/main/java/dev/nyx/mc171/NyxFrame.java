@@ -23,6 +23,7 @@ public final class NyxFrame {
     }
 
     public static void onFrame() {
+        dev.nyx.loader.Watchdog.beat();
         if (errors >= MAX_ERRORS) {
             return;
         }

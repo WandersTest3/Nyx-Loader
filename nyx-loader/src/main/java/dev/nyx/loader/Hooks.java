@@ -60,6 +60,7 @@ public final class Hooks {
 
     public static void onGameStart() {
         renderThread = Thread.currentThread();
+        Watchdog.start();
         try {
             NyxRuntime.start();
         } catch (Throwable error) {
@@ -69,6 +70,7 @@ public final class Hooks {
     }
 
     public static void onClientTick() {
+        Watchdog.beat();
         runPendingRefresh();
         try {
             NyxRuntime.tick();
