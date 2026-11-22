@@ -35,6 +35,10 @@ public final class NyxMixinBootstrap {
     public static void init(List<FabricModContainer> mods) {
         System.setProperty("mixin.bootstrapService", MixinServiceNyxBootstrap.class.getName());
         System.setProperty("mixin.service", MixinServiceNyx.class.getName());
+        if (dev.nyx.loader.launch.NyxLaunch.isForge() && System.getProperty("mixin.ignoreRequired") == null) {
+            System.setProperty("mixin.ignoreRequired", "true");
+            NyxRuntime.log("Forge is present: Fabric mixins that conflict with Forge are skipped instead of crashing");
+        }
         MixinBootstrap.init();
         Map<String, FabricModContainer> configToMod = new HashMap<>();
         int count = 0;

@@ -43,16 +43,17 @@ final class GamePatcher {
             return null;
         }
         try {
-            switch (name) {
-                case MINECRAFT:
-                    return patchMinecraft(bytes);
-                case MAIN_MENU:
-                    return patchMainMenu(bytes);
-                case BRAND:
-                    return patchBrand(bytes);
-                default:
-                    return bytes;
+            RuntimeNames names = NyxLaunch.names();
+            if (name.equals(names.map(MINECRAFT))) {
+                return patchMinecraft(bytes);
             }
+            if (name.equals(names.map(MAIN_MENU))) {
+                return patchMainMenu(bytes);
+            }
+            if (name.equals(BRAND)) {
+                return patchBrand(bytes);
+            }
+            return bytes;
         } catch (RuntimeException error) {
             NyxRuntime.log("Failed to patch " + name + ": " + error);
             return bytes;
@@ -73,6 +74,10 @@ final class GamePatcher {
 
     private static byte[] patchMinecraft(byte[] bytes) {
         ClassNode node = read(bytes);
+        RuntimeNames names = NyxLaunch.names();
+        String initName = names.method(INIT);
+        String tickName = names.method(TICK);
+        String frameName = names.method(FRAME_METHOD);
         boolean init = false;
         boolean fabric = false;
         boolean tick = false;
@@ -81,7 +86,7 @@ final class GamePatcher {
             if (!"()V".equals(method.desc)) {
                 continue;
             }
-            if (INIT.equals(method.name) && constant(method, INIT_MARKER) != null) {
+            if (initName.equals(method.name) && constant(method, INIT_MARKER) != null) {
                 for (AbstractInsnNode insn : method.instructions.toArray()) {
                     if (insn.getOpcode() == Opcodes.RETURN) {
                         method.instructions.insertBefore(insn, call(HOOKS, "onGameStart", "()V"));
@@ -103,10 +108,10 @@ final class GamePatcher {
                     method.instructions.insertBefore(target, list);
                     fabric = true;
                 }
-            } else if (TICK.equals(method.name) && constant(method, TICK_MARKER) != null) {
+            } else if (tickName.equals(method.name) && constant(method, TICK_MARKER) != null) {
                 method.instructions.insert(call(HOOKS, "onClientTick", "()V"));
                 tick = true;
-            } else if (FRAME_METHOD.equals(method.name) && startsWithDisplayUpdate(method)) {
+            } else if (frameName.equals(method.name) && startsWithDisplayUpdate(method)) {
                 method.instructions.insert(call(FRAME, "onFrame", "()V"));
                 frame = true;
             }
@@ -119,10 +124,14 @@ final class GamePatcher {
 
     private static byte[] patchMainMenu(byte[] bytes) {
         ClassNode node = read(bytes);
+        RuntimeNames names = NyxLaunch.names();
+        String drawName = names.method(DRAW);
+        String clickName = names.method(CLICK);
+        String screen = names.map(SCREEN);
         boolean draw = false;
         boolean click = false;
         for (MethodNode method : node.methods) {
-            if (DRAW.equals(method.name) && "(IIF)V".equals(method.desc)) {
+            if (drawName.equals(method.name) && "(IIF)V".equals(method.desc)) {
                 for (AbstractInsnNode insn : method.instructions.toArray()) {
                     if (insn.getOpcode() == Opcodes.RETURN) {
                         InsnList list = new InsnList();
@@ -130,19 +139,19 @@ final class GamePatcher {
                         list.add(new VarInsnNode(Opcodes.ILOAD, 1));
                         list.add(new VarInsnNode(Opcodes.ILOAD, 2));
                         list.add(new VarInsnNode(Opcodes.FLOAD, 3));
-                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "draw", "(L" + SCREEN + ";IIF)V", false));
+                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "draw", "(L" + screen + ";IIF)V", false));
                         method.instructions.insertBefore(insn, list);
                     }
                 }
                 draw = true;
-            } else if (CLICK.equals(method.name) && "(III)V".equals(method.desc)) {
+            } else if (clickName.equals(method.name) && "(III)V".equals(method.desc)) {
                 InsnList list = new InsnList();
                 LabelNode proceed = new LabelNode();
                 list.add(new VarInsnNode(Opcodes.ALOAD, 0));
                 list.add(new VarInsnNode(Opcodes.ILOAD, 1));
                 list.add(new VarInsnNode(Opcodes.ILOAD, 2));
                 list.add(new VarInsnNode(Opcodes.ILOAD, 3));
-                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "click", "(L" + SCREEN + ";III)Z", false));
+                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "click", "(L" + screen + ";III)Z", false));
                 list.add(new JumpInsnNode(Opcodes.IFEQ, proceed));
                 list.add(new InsnNode(Opcodes.RETURN));
                 list.add(proceed);

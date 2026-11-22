@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class NyxClassLoader extends URLClassLoader {
+public final class NyxClassLoader extends URLClassLoader implements GameLoader {
 
     private static final String[] PARENT_ONLY = {
         "java.", "javax.", "jdk.", "sun.", "com.sun.", "org.xml.", "org.w3c.",
@@ -43,8 +43,23 @@ public final class NyxClassLoader extends URLClassLoader {
         super.addURL(url);
     }
 
+    @Override
     public boolean isClassLoadedHere(String name) {
         return findLoadedClass(name) != null;
+    }
+
+    @Override
+    public ClassLoader asClassLoader() {
+        return this;
+    }
+
+    @Override
+    public byte[] getClassBytesForMixin(String name, boolean runTransformers) throws IOException {
+        byte[] bytes = getRawClassBytes(name);
+        if (bytes == null || !runTransformers) {
+            return bytes;
+        }
+        return NyxLaunch.postTransform(name, NyxLaunch.preTransform(name, name, bytes), false);
     }
 
     static boolean isParentOnly(String name) {
@@ -127,7 +142,7 @@ public final class NyxClassLoader extends URLClassLoader {
         } catch (IOException error) {
             throw new ClassNotFoundException(name, error);
         }
-        byte[] transformed = NyxLaunch.transformClass(name, bytes);
+        byte[] transformed = NyxLaunch.postTransform(name, NyxLaunch.preTransform(name, name, bytes), true);
         if (transformed == null) {
             throw new ClassNotFoundException(name + " (rejected by transformer)");
         }

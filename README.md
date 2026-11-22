@@ -4,7 +4,7 @@
 
 Mod loader client-side para Minecraft Java Edition. Em desenvolvimento.
 
-**Versão atual: 0.0.4**: Minecraft **1.7.10**, **Java 21**, mods do Nyx e mods **Fabric** (mapeamentos intermediary do Legacy Fabric).
+**Versão atual: 0.0.5**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
 
 ## Como funciona
 
@@ -18,6 +18,19 @@ Desde a 0.0.4 o Nyx tem lançador próprio e não usa mais o LaunchWrapper.
    - `class_1600.method_2954` (tick) e `method_6648` (antes de `Display.update()`, HUD, teclas e FPS);
    - `class_624` (menu principal): botão do ModMenu;
    - `ClientBrandRetriever`: marca `nyx`.
+
+## Forge + Fabric juntos
+
+Desde a 0.0.5, quando o Forge 1.7.10 (10.13.4.1614) está nas bibliotecas, o Nyx roda o **Forge original** e os mods Fabric na mesma partida:
+
+- O Nyx tem uma implementação própria do LaunchWrapper (`net.minecraft.launchwrapper`) que funciona no Java 21 e executa o `FMLTweaker` do Forge.
+- Correções aplicadas ao Forge durante o carregamento: sem `SecurityManager` (removido do Java 21), `EnumHelper` e object holders via `Unsafe`/MethodHandles, Pack200 do Commons Compress para os binpatches, adaptadores `RemappingClassAdapter`/`RemappingMethodAdapter` para o ASM 9, visitantes ASM5 promovidos para ASM9, emulação de `Field.modifiers` para mods antigos e campos `static final` do Minecraft liberados para reflexão.
+- Com o Forge, o jogo usa os nomes SRG/MCP do Forge. Classes dos mods Fabric (e do próprio Nyx) são convertidas de intermediary para SRG ao carregar, incluindo strings de anotações e constantes, refmaps do Mixin e access wideners.
+- Mixins Fabric que não encaixam no código alterado pelo Forge não derrubam o jogo: o injetor é ignorado e o handler não usado é removido. A lista `config/nyx/forge-disabled-mixins.txt` desliga mixins específicos.
+- Módulos da Legacy Fabric API que substituem registros e rede (registry-sync, block, item, entity, biome, effect, enchantment, command, networking) não são carregados com o Forge, porque o FML já controla IDs e pacotes. Mods Fabric que dependem deles mostram o motivo no log.
+- Sem o Forge nas bibliotecas, o Nyx volta ao modo só Fabric da 0.0.4 e avisa no log quando encontra um mod Forge.
+- O ModMenu lista mods Forge (tag verde), Fabric (laranja) e Nyx (azul).
+- Na primeira execução com Forge, o Nyx cria `config/splash.properties` com `enabled=false`, porque a tela de splash do Forge costuma travar em launchers Android.
 
 ## Compatibilidade com Fabric
 
@@ -117,17 +130,18 @@ A saída fica em `dist/`. O GitHub Actions faz o mesmo a cada push e, ao enviar 
 ## Instalar no Fold Craft Launcher (FCL)
 
 1. No FCL, instale o Minecraft **1.7.10** normal com o nome **Nyx-1.7.10** e abra-o uma vez.
-2. Copie `Nyx-1.7.10.json` (pasta `dist/`) para `versions/Nyx-1.7.10/`, substituindo o original.
+2. Copie `Nyx-1.7.10.json` (pasta `dist/`, com Forge) ou `Nyx-1.7.10-fabric-only.json` (sem Forge) para `versions/Nyx-1.7.10/` com o nome `Nyx-1.7.10.json`.
 3. Nas configurações da versão, escolha **Java 21**.
 4. Coloque mods do Nyx e mods Fabric (Legacy Fabric 1.7.10) em `versions/Nyx-1.7.10/mods` (versão isolada).
-5. O FCL baixa sozinho `nyx-loader`, ASM 9.8, Fabric Mixin e os mapeamentos intermediary 1.7.10 do Legacy Fabric.
+5. O FCL baixa sozinho `nyx-loader`, ASM 9.8, Fabric Mixin, os mapeamentos intermediary 1.7.10 do Legacy Fabric e, no JSON com Forge, o Forge 10.13.4.1614 e as bibliotecas dele.
 6. No log procure `[Nyx] Nyx Loader 0.0.4` e a lista de mods carregados.
 
 O `Nyx-1.7.10.json` tem a versão vanilla no patch `game` e o Nyx no patch `nyx` (`mainClass` `dev.nyx.loader.launch.NyxMain`, `javaVersion` 21).
 
-## Limitações da 0.0.4
+## Limitações da 0.0.5
 
 - Somente Minecraft 1.7.10 e somente cliente.
+- Forge: testado com Biomes O' Plenty 2.1.0 (mundo do tipo Biomes O' Plenty criado). Coremods que dependem de detalhes do LaunchWrapper original ou do Java 8 podem falhar; mods Forge que usam Mixin próprio (MixinTweaker) não têm o tweaker carregado.
 - Precisa de Java 21 ou mais novo.
 - Mods Fabric precisam ser feitos para 1.7.10 (Legacy Fabric). Mods para outras versões são recusados pelo `depends` ou falham ao carregar.
 - Resolução de dependências simplificada: em cada id fica a maior versão compatível. Mods dentro de outros (jar-in-jar) que não servem para 1.7.10 são ignorados.

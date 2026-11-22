@@ -61,6 +61,13 @@ public final class FabricModResolver {
     private final EnvType envType;
     private final List<Candidate> builtins = new ArrayList<>();
     private final List<Candidate> roots = new ArrayList<>();
+    private final Set<String> forbidden = new HashSet<>();
+    private String forbiddenReason = "";
+
+    public void forbid(java.util.Collection<String> ids, String reason) {
+        forbidden.addAll(ids);
+        forbiddenReason = reason;
+    }
 
     public FabricModResolver(Path cacheDirectory, EnvType envType) {
         this.cacheDirectory = cacheDirectory;
@@ -152,6 +159,10 @@ public final class FabricModResolver {
             }
         }
         Set<Candidate> excluded = new HashSet<>();
+        markForbidden(roots, excluded);
+        for (Candidate builtin : builtins) {
+            markForbidden(builtin.nested, excluded);
+        }
         Map<String, Candidate> selected;
         while (true) {
             selected = select(fixed, excluded);
@@ -233,6 +244,16 @@ public final class FabricModResolver {
             result.libraries.addAll(candidate.libraries);
         }
         return result;
+    }
+
+    private void markForbidden(List<Candidate> list, Set<Candidate> excluded) {
+        for (Candidate candidate : list) {
+            if (forbidden.contains(candidate.metadata.getId())) {
+                excluded.add(candidate);
+                NyxRuntime.log("Not loading " + candidate.describe() + ": " + forbiddenReason);
+            }
+            markForbidden(candidate.nested, excluded);
+        }
     }
 
     private void collect(List<Candidate> list, Set<Candidate> unique, List<Candidate> out) {

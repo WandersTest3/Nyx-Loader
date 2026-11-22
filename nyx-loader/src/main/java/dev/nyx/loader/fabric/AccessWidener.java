@@ -25,7 +25,7 @@ public final class AccessWidener {
     private final Map<String, Integer> fields = new HashMap<>();
     private final Set<String> targets = new HashSet<>();
 
-    public void read(Reader source, String where) throws IOException {
+    public void read(Reader source, String where, dev.nyx.loader.launch.RuntimeNames names) throws IOException {
         BufferedReader reader = new BufferedReader(source);
         String header = reader.readLine();
         while (header != null && header.trim().isEmpty()) {
@@ -79,7 +79,11 @@ public final class AccessWidener {
                 throw new IOException("Invalid line in " + where + ":" + number);
             }
             String kind = parts[1];
-            String owner = parts[2];
+            String owner = names.map(parts[2]);
+            if (parts.length >= 5) {
+                parts[3] = kind.equals("method") ? names.method(parts[3]) : names.field(parts[3]);
+                parts[4] = kind.equals("method") ? names.mapMethodDesc(parts[4]) : names.mapDesc(parts[4]);
+            }
             switch (kind) {
                 case "class":
                     if (flag == MUTABLE) {

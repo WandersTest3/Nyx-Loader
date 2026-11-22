@@ -12,6 +12,8 @@ public final class TinyMappings {
     private final Map<String, String> classesReverse = new HashMap<>();
     private final Map<String, String> fields = new HashMap<>();
     private final Map<String, String> methods = new HashMap<>();
+    private final java.util.List<String[]> methodEntries = new java.util.ArrayList<>();
+    private final java.util.List<String[]> fieldEntries = new java.util.ArrayList<>();
 
     private TinyMappings() {
     }
@@ -60,9 +62,11 @@ public final class TinyMappings {
                     break;
                 case "FIELD":
                     fields.put(parts[1] + "/" + parts[3 + from], parts[3 + to]);
+                    fieldEntries.add(new String[] {parts[1], parts[3 + from], parts[2], parts[3 + to]});
                     break;
                 case "METHOD":
                     methods.put(parts[1] + "/" + parts[3 + from] + parts[2], parts[3 + to]);
+                    methodEntries.add(new String[] {parts[1], parts[3 + from], parts[2], parts[3 + to]});
                     break;
                 default:
                     break;
@@ -87,8 +91,10 @@ public final class TinyMappings {
                 putClass(owner, parts[1 + to]);
             } else if (depth == 1 && owner != null && parts[0].equals("f")) {
                 fields.put(owner + "/" + parts[2 + from], parts[2 + to]);
+                fieldEntries.add(new String[] {owner, parts[2 + from], parts[1], parts[2 + to]});
             } else if (depth == 1 && owner != null && parts[0].equals("m")) {
                 methods.put(owner + "/" + parts[2 + from] + parts[1], parts[2 + to]);
+                methodEntries.add(new String[] {owner, parts[2 + from], parts[1], parts[2 + to]});
             }
         }
     }
@@ -99,6 +105,18 @@ public final class TinyMappings {
         }
         classes.put(from, to);
         classesReverse.put(to, from);
+    }
+
+    public java.util.List<String[]> methodEntries() {
+        return methodEntries;
+    }
+
+    public java.util.List<String[]> fieldEntries() {
+        return fieldEntries;
+    }
+
+    public Map<String, String> classEntries() {
+        return classes;
     }
 
     public boolean hasClass(String name) {

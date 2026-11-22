@@ -128,7 +128,23 @@ public class MixinServiceNyx implements IMixinService, IClassProvider, IClassByt
 
     @Override
     public InputStream getResourceAsStream(String name) {
-        return NyxLaunch.gameClassLoader().getResourceAsStream(name);
+        InputStream input = NyxLaunch.gameClassLoader().getResourceAsStream(name);
+        if (input == null || NyxLaunch.names().isIdentity() || !name.endsWith(".json")) {
+            return input;
+        }
+        try (InputStream source = input) {
+            String text = new String(source.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            if (text.contains("\"mappings\"")) {
+                text = NyxLaunch.names().remapString(text);
+            } else if (NyxLaunch.isForge() && text.contains("\"package\"")) {
+                text = text.replaceAll("\"required\"\\s*:\\s*true", "\"required\": false")
+                        .replaceAll("\"defaultRequire\"\\s*:\\s*\\d+", "\"defaultRequire\": 0");
+                text = ForgeMixinFilter.filter(name, text);
+            }
+            return new java.io.ByteArrayInputStream(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IOException error) {
+            return null;
+        }
     }
 
     @Override
@@ -213,7 +229,7 @@ public class MixinServiceNyx implements IMixinService, IClassProvider, IClassByt
 
     @Override
     public boolean isClassLoaded(String className) {
-        return NyxLaunch.nyxClassLoader().isClassLoadedHere(className);
+        return NyxLaunch.gameLoader().isClassLoadedHere(className);
     }
 
     @Override

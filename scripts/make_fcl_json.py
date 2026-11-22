@@ -25,9 +25,34 @@ LIBRARIES = [
 ]
 
 
+FORGE = "https://maven.minecraftforge.net/"
+MOJANG = "https://libraries.minecraft.net/"
+
+FORGE_LIBRARIES = [
+    ("net.minecraftforge:forge:1.7.10-10.13.4.1614-1.7.10:universal", FORGE, "25fd97f72beca728112256938e03e8105b1b78cc", 3018833),
+    ("org.apache.commons:commons-compress:1.21", CENTRAL, "4ec95b60d4e86b5c95a0e919cb172a0af98011ef", 1018316),
+    ("com.google.guava:guava:17.0", MOJANG, "9c6ef172e8de35fd8d4d8783e4821e57cdef7445", 2243036),
+    ("org.apache.commons:commons-lang3:3.3.2", MOJANG, "90a3822c38ec8c996e84c16a3477ef632cbc87a3", 412739),
+    ("lzma:lzma:0.0.1", MOJANG, "521616dc7487b42bef0e803bd2fa3faf668101d7", 5762),
+    ("com.typesafe.akka:akka-actor_2.11:2.3.3", FORGE, "ed62e9fc709ca0f2ff1a3220daa8b70a2870078e", 2514991),
+    ("com.typesafe:config:1.2.1", FORGE, "f771f71fdae3df231bcd54d5ca2d57f0bf93f467", 219554),
+    ("org.scala-lang:scala-actors-migration_2.11:1.1.0", FORGE, "dfa8bc42b181d5b9f1a5dd147f8ae308b893eb6f", 58018),
+    ("org.scala-lang:scala-compiler:2.11.1", FORGE, "56ea2e6c025e0821f28d73ca271218b8dd04926a", 13449765),
+    ("org.scala-lang.plugins:scala-continuations-library_2.11:1.0.2", FORGE, "0e517c53a7e9acd6b1668c5a35eccbaa3bab9aac", 25365),
+    ("org.scala-lang.plugins:scala-continuations-plugin_2.11.1:1.0.2", FORGE, "f361a3283452c57fa30c1ee69448995de23c60f7", 206575),
+    ("org.scala-lang:scala-library:2.11.1", FORGE, "0e11da23da3eabab9f4777b9220e60d44c1aab6a", 5538130),
+    ("org.scala-lang:scala-parser-combinators_2.11:1.0.1", FORGE, "f05d7345bf5a58924f2837c6c1f4d73a938e1ff0", 419701),
+    ("org.scala-lang:scala-reflect:2.11.1", FORGE, "6580347e61cc7f8e802941e7fde40fa83b8badeb", 4372892),
+    ("org.scala-lang:scala-swing_2.11:1.0.1", FORGE, "b1cdd92bd47b1e1837139c1c53020e86bb9112ae", 726500),
+    ("org.scala-lang:scala-xml_2.11:1.0.2", FORGE, "7a80ec00aec122fba7cd4e0d4cdd87ff7e4cb6d0", 648679),
+]
+
+
 def maven_library(name, repo, sha1, size):
-    group, artifact, version = name.split(":")
-    path = "{}/{}/{}/{}-{}.jar".format(group.replace(".", "/"), artifact, version, artifact, version)
+    parts = name.split(":")
+    group, artifact, version = parts[0], parts[1], parts[2]
+    suffix = "-" + parts[3] if len(parts) > 3 else ""
+    path = "{}/{}/{}/{}-{}{}.jar".format(group.replace(".", "/"), artifact, version, artifact, version, suffix)
     return {
         "name": name,
         "downloads": {"artifact": {"path": path, "sha1": sha1, "size": size, "url": repo + path}},
@@ -61,6 +86,7 @@ def main():
     parser.add_argument("--nyx-version", required=True)
     parser.add_argument("--jar", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--forge", action="store_true")
     args = parser.parse_args()
 
     manifest = fetch_json(MANIFEST)
@@ -69,6 +95,10 @@ def main():
 
     name = "Nyx-" + args.mc
     libraries = [nyx_library(args.jar, args.nyx_version)] + [maven_library(*lib) for lib in LIBRARIES]
+    if args.forge:
+        libraries += [maven_library(*lib) for lib in FORGE_LIBRARIES]
+    replaced = {":".join(lib["name"].split(":")[:2]) for lib in libraries}
+    base_libraries = [lib for lib in base["libraries"] if ":".join(lib["name"].split(":")[:2]) not in replaced]
     arguments = base["minecraftArguments"]
     java = {"component": "java-runtime-delta", "majorVersion": JAVA_MAJOR}
 
@@ -94,7 +124,7 @@ def main():
             "id": name,
             "jar": name,
             "root": True,
-            "libraries": libraries + base["libraries"],
+            "libraries": libraries + base_libraries,
             "mainClass": LAUNCH_MAIN,
             "minecraftArguments": arguments,
             "javaVersion": java,

@@ -30,6 +30,7 @@ public final class Lang {
         put("authors", "Autores:", "Authors:");
         put("client", "Nyx", "Nyx");
         put("fabric", "Fabric", "Fabric");
+        put("forge", "Forge", "Forge");
         put("library", "Biblioteca", "Library");
         put("empty", "Nenhum mod encontrado", "No mods found");
         put("hint", "Coloque arquivos .jar na pasta mods", "Put .jar files in the mods folder");

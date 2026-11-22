@@ -17,7 +17,7 @@ import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import dev.nyx.loader.fabric.FabricModContainer;
 import dev.nyx.loader.fabric.NyxFabricLoader;
-import dev.nyx.loader.launch.NyxClassLoader;
+import dev.nyx.loader.launch.GameLoader;
 import net.fabricmc.loader.api.metadata.ModMetadata;
 import net.fabricmc.loader.api.metadata.Person;
 import org.lwjgl.input.Keyboard;
@@ -33,7 +33,7 @@ public final class NyxRuntime {
     private static final List<KeyBinding> KEYS = new CopyOnWriteArrayList<KeyBinding>();
 
     private static File gameDirectory = new File(".");
-    private static NyxClassLoader classLoader;
+    private static GameLoader classLoader;
     private static boolean started;
     private static volatile int fps;
     private static volatile long frameTimeMillis;
@@ -114,11 +114,61 @@ public final class NyxRuntime {
         return false;
     }
 
+    public static List<ModContainer> getForgeEntries() {
+        List<ModContainer> result = new ArrayList<ModContainer>();
+        if (!dev.nyx.loader.launch.NyxLaunch.isForge()) {
+            return result;
+        }
+        try {
+            ClassLoader loader = dev.nyx.loader.launch.NyxLaunch.gameClassLoader();
+            Class<?> loaderClass = Class.forName("cpw.mods.fml.common.Loader", true, loader);
+            Object instance = loaderClass.getMethod("instance").invoke(null);
+            List<?> mods = (List<?>) loaderClass.getMethod("getActiveModList").invoke(instance);
+            for (Object mod : mods) {
+                Class<?> type = Class.forName("cpw.mods.fml.common.ModContainer", true, loader);
+                String id = String.valueOf(type.getMethod("getModId").invoke(mod));
+                String name = String.valueOf(type.getMethod("getName").invoke(mod));
+                String version = String.valueOf(type.getMethod("getVersion").invoke(mod));
+                Object meta = type.getMethod("getMetadata").invoke(mod);
+                String description = null;
+                String authors = null;
+                String url = null;
+                if (meta != null) {
+                    Object desc = meta.getClass().getField("description").get(meta);
+                    description = desc == null || String.valueOf(desc).isEmpty() ? null : String.valueOf(desc);
+                    Object list = meta.getClass().getField("authorList").get(meta);
+                    if (list instanceof List && !((List<?>) list).isEmpty()) {
+                        List<String> names = new ArrayList<String>();
+                        for (Object author : (List<?>) list) {
+                            names.add(String.valueOf(author));
+                        }
+                        authors = String.join(", ", names);
+                    }
+                    Object link = meta.getClass().getField("url").get(meta);
+                    if (link != null && !String.valueOf(link).isEmpty()) {
+                        url = String.valueOf(link);
+                        if (!url.startsWith("http")) {
+                            url = "http://" + url;
+                        }
+                    }
+                }
+                Object source = type.getMethod("getSource").invoke(mod);
+                File file = source instanceof File && ((File) source).isFile() ? (File) source : null;
+                boolean library = "mcp".equalsIgnoreCase(id) || "FML".equals(id) || "Forge".equals(id);
+                result.add(new ModContainer(id.toLowerCase(java.util.Locale.ROOT), name, version, null, description,
+                        authors, null, url, null, null, file, library, "forge"));
+            }
+        } catch (Throwable error) {
+            log("Could not list Forge mods: " + error);
+        }
+        return result;
+    }
+
     public static List<ModContainer> getFabricEntries() {
         return Collections.unmodifiableList(FABRIC);
     }
 
-    public static NyxClassLoader getClassLoader() {
+    public static GameLoader getClassLoader() {
         return classLoader;
     }
 
@@ -231,7 +281,7 @@ public final class NyxRuntime {
         }
     }
 
-    public static void setClassLoader(NyxClassLoader loader) {
+    public static void setClassLoader(GameLoader loader) {
         classLoader = loader;
     }
 
@@ -266,7 +316,7 @@ public final class NyxRuntime {
         }
     }
 
-    public static void readMod(File file, NyxClassLoader loader) {
+    public static void readMod(File file, GameLoader loader) {
         try (JarFile jar = new JarFile(file)) {
             ZipEntry entry = jar.getEntry(METADATA_FILE);
             if (entry == null) {
@@ -304,7 +354,7 @@ public final class NyxRuntime {
 
     private static void initialize(ModContainer mod) {
         try {
-            Object instance = Class.forName(mod.entrypoint, true, classLoader).getDeclaredConstructor().newInstance();
+            Object instance = Class.forName(mod.entrypoint, true, classLoader.asClassLoader()).getDeclaredConstructor().newInstance();
             if (!(instance instanceof NyxMod)) {
                 log("Mod " + mod.id + " entrypoint does not implement dev.nyx.api.NyxMod");
                 return;

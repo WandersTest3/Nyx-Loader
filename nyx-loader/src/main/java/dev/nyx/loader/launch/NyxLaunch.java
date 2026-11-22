@@ -10,26 +10,29 @@ import org.spongepowered.asm.mixin.transformer.IMixinTransformer;
 public final class NyxLaunch {
 
     private static final Map<String, Object> PROPERTIES = new HashMap<>();
+    private static final byte[] INTERMEDIARY_MARKER = "net/minecraft/class_".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
 
-    private static NyxClassLoader classLoader;
+    private static GameLoader loader;
     private static TinyMappings mappings;
-    private static AccessWidener accessWidener = new AccessWidener();
+    private static RuntimeNames names = RuntimeNames.IDENTITY;
+    private static final AccessWidener ACCESS_WIDENER = new AccessWidener();
     private static volatile IMixinTransformer mixinTransformer;
     private static volatile boolean mixinReady;
+    private static boolean forge;
 
     private NyxLaunch() {
     }
 
     public static ClassLoader gameClassLoader() {
-        return classLoader;
+        return loader.asClassLoader();
     }
 
-    public static NyxClassLoader nyxClassLoader() {
-        return classLoader;
+    public static GameLoader gameLoader() {
+        return loader;
     }
 
-    static void setClassLoader(NyxClassLoader loader) {
-        classLoader = loader;
+    static void setGameLoader(GameLoader value) {
+        loader = value;
     }
 
     public static TinyMappings mappings() {
@@ -40,8 +43,24 @@ public final class NyxLaunch {
         mappings = value;
     }
 
+    public static RuntimeNames names() {
+        return names;
+    }
+
+    static void setNames(RuntimeNames value) {
+        names = value;
+    }
+
+    public static boolean isForge() {
+        return forge;
+    }
+
+    static void setForge(boolean value) {
+        forge = value;
+    }
+
     public static AccessWidener accessWidener() {
-        return accessWidener;
+        return ACCESS_WIDENER;
     }
 
     public static Map<String, Object> properties() {
@@ -61,36 +80,62 @@ public final class NyxLaunch {
     }
 
     public static byte[] getClassBytes(String name, boolean runTransformers) throws java.io.IOException {
-        byte[] bytes = classLoader.getRawClassBytes(name);
-        if (bytes == null || !runTransformers) {
+        return loader.getClassBytesForMixin(name, runTransformers);
+    }
+
+    public static byte[] preTransform(String name, String transformedName, byte[] bytes) {
+        if (bytes == null || names == RuntimeNames.IDENTITY || !contains(bytes, INTERMEDIARY_MARKER)) {
             return bytes;
         }
-        return preMixin(name, bytes);
+        if (transformedName.startsWith("net.minecraft.") && !transformedName.startsWith("net.minecraft.class_")) {
+            return bytes;
+        }
+        return names.remapClass(bytes);
     }
 
-    private static byte[] preMixin(String name, byte[] bytes) {
-        String internal = name.replace('.', '/');
-        byte[] result = GamePatcher.transform(internal, bytes);
-        result = accessWidener.apply(internal, result);
-        result = EnvironmentStripper.strip(internal, result);
-        return result;
+    public static byte[] fixExcluded(String name, byte[] bytes) {
+        if (!forge) {
+            return bytes;
+        }
+        return dev.nyx.loader.forge.ForgeFixes.transform(name.replace('.', '/'), bytes);
     }
 
-    static byte[] transformClass(String name, byte[] bytes) {
-        byte[] result = preMixin(name, bytes);
-        if (result == null) {
+    public static byte[] postTransform(String name, byte[] bytes, boolean withMixin) {
+        if (bytes == null) {
             return null;
         }
+        String internal = name.replace('.', '/');
+        byte[] result = forge ? dev.nyx.loader.forge.ForgeFixes.transform(internal, bytes) : bytes;
+        result = GamePatcher.transform(internal, result);
+        result = ACCESS_WIDENER.apply(internal, result);
+        result = EnvironmentStripper.strip(internal, result);
         IMixinTransformer transformer = mixinTransformer;
-        if (mixinReady && transformer != null && !name.startsWith("org.spongepowered.")
+        if (withMixin && mixinReady && transformer != null && !name.startsWith("org.spongepowered.")
                 && !name.startsWith("com.llamalad7.mixinextras.")) {
             try {
+                byte[] before = result;
                 result = transformer.transformClassBytes(name, name, result);
+                if (forge) {
+                    result = dev.nyx.loader.forge.ForgeFixes.removeUnusedMixinHandlers(name, before, result);
+                }
             } catch (RuntimeException | Error error) {
                 NyxRuntime.log("Mixin failed to transform " + name + ": " + error);
                 throw error;
             }
         }
         return result;
+    }
+
+    static boolean contains(byte[] haystack, byte[] needle) {
+        outer:
+        for (int i = 0; i <= haystack.length - needle.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (haystack[i + j] != needle[j]) {
+                    continue outer;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 }

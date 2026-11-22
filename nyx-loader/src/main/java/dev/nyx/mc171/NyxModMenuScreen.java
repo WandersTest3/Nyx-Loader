@@ -57,7 +57,18 @@ public class NyxModMenuScreen extends class_388 {
                 all.add(mod);
             }
         }
+        List<ModContainer> forge = NyxRuntime.getForgeEntries();
+        for (ModContainer mod : forge) {
+            if (!mod.library) {
+                all.add(mod);
+            }
+        }
         all.addAll(NyxRuntime.getBuiltinEntries());
+        for (ModContainer mod : forge) {
+            if (mod.library) {
+                all.add(mod);
+            }
+        }
         for (ModContainer mod : NyxRuntime.getFabricEntries()) {
             if (mod.library) {
                 all.add(mod);
@@ -241,12 +252,12 @@ public class NyxModMenuScreen extends class_388 {
         int maxW = listW - 46;
         String name = font.method_955(mod.name, maxW - 40);
         text(font, name, textX, y + 3, 0xFFFFFFFF);
-        String tag = Lang.t(mod.library ? "library" : "fabric".equals(mod.kind) ? "fabric" : "client");
+        String tag = Lang.t(mod.library ? "library" : "fabric".equals(mod.kind) ? "fabric" : "forge".equals(mod.kind) ? "forge" : "client");
         int tagX = textX + font.method_954(name) + 4;
         int tagW = font.method_954(tag) + 6;
         if (tagX + tagW <= listX + listW - 6) {
-            Gfx.rect(tagX, y + 2, tagW, 10, mod.library ? 0xFF4A3A66 : "fabric".equals(mod.kind) ? 0xFF6B4E1F : 0xFF1F3E7A);
-            Gfx.border(tagX, y + 2, tagW, 10, mod.library ? 0xFF8A72B8 : "fabric".equals(mod.kind) ? 0xFFDBA74C : 0xFF4C7DDB);
+            Gfx.rect(tagX, y + 2, tagW, 10, mod.library ? 0xFF4A3A66 : "fabric".equals(mod.kind) ? 0xFF6B4E1F : "forge".equals(mod.kind) ? 0xFF1F4A2E : 0xFF1F3E7A);
+            Gfx.border(tagX, y + 2, tagW, 10, mod.library ? 0xFF8A72B8 : "fabric".equals(mod.kind) ? 0xFFDBA74C : "forge".equals(mod.kind) ? 0xFF4CDB7D : 0xFF4C7DDB);
             text(font, tag, tagX + 3, y + 3, 0xFFFFFFFF);
         }
         String description = mod.description == null ? Lang.t("no_description") : mod.description;
