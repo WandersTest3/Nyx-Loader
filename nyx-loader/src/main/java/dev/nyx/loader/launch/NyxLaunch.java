@@ -102,6 +102,11 @@ public final class NyxLaunch {
 
     public static byte[] postTransform(String name, byte[] bytes, boolean withMixin) {
         if (bytes == null) {
+            IMixinTransformer generator = mixinTransformer;
+            if (withMixin && mixinReady && generator != null && !name.startsWith("org.spongepowered.")
+                    && !name.startsWith("com.llamalad7.mixinextras.")) {
+                return generator.transformClassBytes(name, name, null);
+            }
             return null;
         }
         String internal = name.replace('.', '/');

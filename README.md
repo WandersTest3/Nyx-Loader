@@ -4,7 +4,7 @@
 
 Mod loader client-side para Minecraft Java Edition. Em desenvolvimento.
 
-**Versão atual: 0.0.5**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
+**Versão atual: 0.0.6**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
 
 ## Como funciona
 
@@ -21,7 +21,7 @@ Desde a 0.0.4 o Nyx tem lançador próprio e não usa mais o LaunchWrapper.
 
 ## Forge + Fabric juntos
 
-Desde a 0.0.5, quando o Forge 1.7.10 (10.13.4.1614) está nas bibliotecas, o Nyx roda o **Forge original** e os mods Fabric na mesma partida:
+Desde a 0.0.6, quando o Forge 1.7.10 (10.13.4.1614) está nas bibliotecas, o Nyx roda o **Forge original** e os mods Fabric na mesma partida:
 
 - O Nyx tem uma implementação própria do LaunchWrapper (`net.minecraft.launchwrapper`) que funciona no Java 21 e executa o `FMLTweaker` do Forge.
 - Correções aplicadas ao Forge durante o carregamento: sem `SecurityManager` (removido do Java 21), `EnumHelper` e object holders via `Unsafe`/MethodHandles, Pack200 do Commons Compress para os binpatches, adaptadores `RemappingClassAdapter`/`RemappingMethodAdapter` para o ASM 9, visitantes ASM5 promovidos para ASM9, emulação de `Field.modifiers` para mods antigos e campos `static final` do Minecraft liberados para reflexão.
@@ -138,7 +138,7 @@ A saída fica em `dist/`. O GitHub Actions faz o mesmo a cada push e, ao enviar 
 
 O `Nyx-1.7.10.json` tem a versão vanilla no patch `game` e o Nyx no patch `nyx` (`mainClass` `dev.nyx.loader.launch.NyxMain`, `javaVersion` 21).
 
-## Limitações da 0.0.5
+## Limitações da 0.0.6
 
 - Somente Minecraft 1.7.10 e somente cliente.
 - Forge: testado com Biomes O' Plenty 2.1.0 (mundo do tipo Biomes O' Plenty criado). Coremods que dependem de detalhes do LaunchWrapper original ou do Java 8 podem falhar; mods Forge que usam Mixin próprio (MixinTweaker) não têm o tweaker carregado.
