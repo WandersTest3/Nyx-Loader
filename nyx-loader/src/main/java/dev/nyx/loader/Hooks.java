@@ -7,6 +7,8 @@ import net.fabricmc.api.ModInitializer;
 public final class Hooks {
 
     private static boolean fabricStarted;
+    private static volatile Thread renderThread;
+    private static volatile Object pendingRefresh;
 
     private Hooks() {
     }
@@ -16,6 +18,7 @@ public final class Hooks {
             return;
         }
         fabricStarted = true;
+        renderThread = Thread.currentThread();
         NyxFabricLoader loader = NyxFabricLoader.get();
         loader.setGameInstance(game);
         loader.invokeEntrypoints("main", ModInitializer.class, ModInitializer::onInitialize);
@@ -30,7 +33,33 @@ public final class Hooks {
         return brand + ",nyx";
     }
 
+    public static boolean offRenderThread() {
+        Thread render = renderThread;
+        return render != null && Thread.currentThread() != render;
+    }
+
+    public static void deferRefresh(Object game) {
+        NyxRuntime.log("Resource reload requested from thread " + Thread.currentThread().getName() + "; running it on the render thread");
+        pendingRefresh = game;
+    }
+
+    private static void runPendingRefresh() {
+        Object game = pendingRefresh;
+        if (game == null) {
+            return;
+        }
+        pendingRefresh = null;
+        try {
+            java.lang.reflect.Method method = game.getClass().getDeclaredMethod(dev.nyx.loader.launch.NyxLaunch.names().method("method_5576"));
+            method.setAccessible(true);
+            method.invoke(game);
+        } catch (Throwable error) {
+            NyxRuntime.log("Deferred resource reload failed: " + error);
+        }
+    }
+
     public static void onGameStart() {
+        renderThread = Thread.currentThread();
         try {
             NyxRuntime.start();
         } catch (Throwable error) {
@@ -40,6 +69,7 @@ public final class Hooks {
     }
 
     public static void onClientTick() {
+        runPendingRefresh();
         try {
             NyxRuntime.tick();
         } catch (Throwable error) {

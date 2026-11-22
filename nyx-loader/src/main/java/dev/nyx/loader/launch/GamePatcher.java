@@ -32,6 +32,7 @@ final class GamePatcher {
     private static final String TICK = "method_2954";
     private static final String TICK_MARKER = "Ticking screen";
     private static final String FRAME_METHOD = "method_6648";
+    private static final String REFRESH = "method_5576";
     private static final String DRAW = "method_1025";
     private static final String CLICK = "method_1026";
 
@@ -78,6 +79,7 @@ final class GamePatcher {
         String initName = names.method(INIT);
         String tickName = names.method(TICK);
         String frameName = names.method(FRAME_METHOD);
+        String refreshName = names.method(REFRESH);
         boolean init = false;
         boolean fabric = false;
         boolean tick = false;
@@ -111,6 +113,16 @@ final class GamePatcher {
             } else if (tickName.equals(method.name) && constant(method, TICK_MARKER) != null) {
                 method.instructions.insert(call(HOOKS, "onClientTick", "()V"));
                 tick = true;
+            } else if (refreshName.equals(method.name) && (method.access & Opcodes.ACC_STATIC) == 0) {
+                LabelNode run = new LabelNode();
+                InsnList guard = new InsnList();
+                guard.add(call(HOOKS, "offRenderThread", "()Z"));
+                guard.add(new JumpInsnNode(Opcodes.IFEQ, run));
+                guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                guard.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HOOKS, "deferRefresh", "(Ljava/lang/Object;)V", false));
+                guard.add(new InsnNode(Opcodes.RETURN));
+                guard.add(run);
+                method.instructions.insert(guard);
             } else if (frameName.equals(method.name) && startsWithDisplayUpdate(method)) {
                 method.instructions.insert(call(FRAME, "onFrame", "()V"));
                 frame = true;
