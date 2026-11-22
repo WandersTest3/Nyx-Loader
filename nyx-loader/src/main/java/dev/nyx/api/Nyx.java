@@ -5,7 +5,7 @@ import java.io.File;
 
 public final class Nyx {
 
-    public static final String VERSION = "0.0.9";
+    public static final String VERSION = "0.0.10";
     public static final String MINECRAFT_VERSION = "1.7.10";
 
     private Nyx() {

@@ -28,7 +28,33 @@ public final class ForgeFixes {
     }
 
     private static final byte[] DECLARED_FIELD = "getDeclaredField".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    private static final byte[] ATTRIB_POINTER = "glVertexAttribPointerARB".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
     private static final byte[] ASM_MARKER = "org/objectweb/asm/".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+
+    private static byte[] redirectAttribPointer(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        boolean changed = false;
+        for (MethodNode method : node.methods) {
+            for (org.objectweb.asm.tree.AbstractInsnNode insn : method.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode) {
+                    MethodInsnNode call = (MethodInsnNode) insn;
+                    if (call.getOpcode() == Opcodes.INVOKESTATIC && "org/lwjgl/opengl/ARBVertexShader".equals(call.owner)
+                            && "glVertexAttribPointerARB".equals(call.name) && call.desc.endsWith("Buffer;)V")) {
+                        call.owner = "dev/nyx/loader/GlCompat";
+                        call.name = "attribPointer";
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (!changed) {
+            return bytes;
+        }
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
 
     public static byte[] transform(String name, byte[] bytes) {
         if (bytes == null) {
@@ -41,6 +67,9 @@ public final class ForgeFixes {
         }
         if (!name.startsWith("dev/nyx/") && contains(bytes, DECLARED_FIELD)) {
             bytes = redirectDeclaredField(bytes);
+        }
+        if (!name.startsWith("dev/nyx/") && contains(bytes, ATTRIB_POINTER)) {
+            bytes = redirectAttribPointer(bytes);
         }
         if (ENUM_HELPER.equals(name)) {
             return patchEnumHelper(bytes);
