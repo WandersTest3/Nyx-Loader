@@ -64,6 +64,23 @@ public class LaunchClassLoader extends URLClassLoader implements GameLoader {
         addTransformerExclusion("com.llamalad7.mixinextras.");
     }
 
+    private Class<?> findExcludedLocally(String name, ClassNotFoundException missing) throws ClassNotFoundException {
+        synchronized (getClassLoadingLock(name)) {
+            Class<?> cached = cachedClasses.get(name);
+            if (cached != null) {
+                return cached;
+            }
+            Class<?> clazz;
+            try {
+                clazz = super.findClass(name);
+            } catch (ClassNotFoundException error) {
+                throw missing;
+            }
+            cachedClasses.put(name, clazz);
+            return clazz;
+        }
+    }
+
     public void registerTransformer(String transformerClassName) {
         try {
             IClassTransformer transformer = (IClassTransformer) loadClass(transformerClassName)
@@ -84,7 +101,11 @@ public class LaunchClassLoader extends URLClassLoader implements GameLoader {
         }
         for (String exception : classLoaderExceptions) {
             if (name.startsWith(exception)) {
-                return parent.loadClass(name);
+                try {
+                    return parent.loadClass(name);
+                } catch (ClassNotFoundException missing) {
+                    return findExcludedLocally(name, missing);
+                }
             }
         }
         Class<?> cached = cachedClasses.get(name);

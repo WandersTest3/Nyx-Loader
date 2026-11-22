@@ -162,6 +162,14 @@ public final class ForgeCompat {
         return false;
     }
 
+    public static Object cascadeAddUrl(java.lang.reflect.Method method, Object target, Object[] args)
+            throws Exception {
+        if (target != null && !method.getDeclaringClass().isInstance(target)) {
+            return null;
+        }
+        return method.invoke(target, args);
+    }
+
     public static Object holderInvoke(java.lang.reflect.Method method, Object target, Object[] args)
             throws Exception {
         if (method != null) {

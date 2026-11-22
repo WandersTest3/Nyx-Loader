@@ -172,6 +172,13 @@ public final class ForgeFixes {
             list.add(new InsnNode(Opcodes.RETURN));
             list.add(proceed);
             method.instructions.insert(list);
+            for (org.objectweb.asm.tree.AbstractInsnNode insn : method.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode && "java/lang/reflect/Method".equals(((MethodInsnNode) insn).owner)
+                        && "invoke".equals(((MethodInsnNode) insn).name)) {
+                    method.instructions.set(insn, new MethodInsnNode(Opcodes.INVOKESTATIC, COMPAT, "cascadeAddUrl",
+                            "(Ljava/lang/reflect/Method;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false));
+                }
+            }
         }
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         node.accept(writer);

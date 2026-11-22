@@ -5,8 +5,17 @@ import net.minecraft.class_388;
 import dev.nyx.loader.ModContainer;
 import dev.nyx.loader.NyxRuntime;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.jar.Attributes;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
@@ -20,6 +29,8 @@ public class NyxModMenuScreen extends class_388 {
     private static final int COUNT_Y = 42;
     private static final int LIST_TOP = 54;
     private static final int BUTTON_H = 20;
+    private static final int BAR_W = 6;
+    private static final int BAR_HIT = 14;
     private static final int KEY_ESCAPE = 1;
     private static final int KEY_BACKSPACE = 14;
     private static final int KEY_UP = 200;
@@ -37,8 +48,9 @@ public class NyxModMenuScreen extends class_388 {
     private int detailHeight;
     private int pressedRow = -1;
     private int pressY;
-    private int lastDragY;
     private boolean dragging;
+    private boolean barDragging;
+    private int barGrab;
     private String toast;
     private long toastUntil;
 
@@ -51,32 +63,73 @@ public class NyxModMenuScreen extends class_388 {
 
     public NyxModMenuScreen(class_388 parent) {
         this.parent = parent;
-        all.addAll(NyxRuntime.getMods());
-        for (ModContainer mod : NyxRuntime.getFabricEntries()) {
-            if (!mod.library) {
+        File modsDir = canonical(NyxRuntime.getModsDirectory());
+        Set<File> shown = new HashSet<File>();
+        List<ModContainer> candidates = new ArrayList<ModContainer>(NyxRuntime.getMods());
+        candidates.addAll(NyxRuntime.getFabricEntries());
+        candidates.addAll(NyxRuntime.getForgeEntries());
+        for (ModContainer mod : candidates) {
+            File file = mod.file == null ? null : canonical(mod.file);
+            if (file != null && modsDir.equals(file.getParentFile())) {
                 all.add(mod);
+                shown.add(file);
             }
         }
-        List<ModContainer> forge = NyxRuntime.getForgeEntries();
-        for (ModContainer mod : forge) {
-            if (!mod.library) {
-                all.add(mod);
+        addTweakerJars(modsDir, shown);
+        Collections.sort(all, new Comparator<ModContainer>() {
+            public int compare(ModContainer a, ModContainer b) {
+                if (a.library != b.library) {
+                    return a.library ? 1 : -1;
+                }
+                return a.name.compareToIgnoreCase(b.name);
             }
-        }
-        all.addAll(NyxRuntime.getBuiltinEntries());
-        for (ModContainer mod : forge) {
-            if (mod.library) {
-                all.add(mod);
-            }
-        }
-        for (ModContainer mod : NyxRuntime.getFabricEntries()) {
-            if (mod.library) {
-                all.add(mod);
-            }
-        }
+        });
         refilter();
         if (!visible.isEmpty()) {
             selected = visible.get(0);
+        }
+    }
+
+    private static File canonical(File file) {
+        try {
+            return file.getCanonicalFile();
+        } catch (IOException error) {
+            return file.getAbsoluteFile();
+        }
+    }
+
+    private void addTweakerJars(File modsDir, Set<File> shown) {
+        File[] files = modsDir.listFiles();
+        if (files == null) {
+            return;
+        }
+        Arrays.sort(files);
+        for (File file : files) {
+            String fileName = file.getName();
+            if (!file.isFile() || !fileName.toLowerCase().endsWith(".jar") || shown.contains(canonical(file))) {
+                continue;
+            }
+            try (JarFile jar = new JarFile(file)) {
+                Manifest manifest = jar.getManifest();
+                Attributes attributes = manifest == null ? null : manifest.getMainAttributes();
+                if (attributes == null || attributes.getValue("TweakClass") == null
+                        && attributes.getValue("FMLCorePlugin") == null) {
+                    continue;
+                }
+                String base = fileName.substring(0, fileName.length() - 4);
+                boolean optifine = jar.getEntry("optifine/OptiFineForgeTweaker.class") != null;
+                String name = optifine ? "OptiFine" : base;
+                String version = attributes.getValue("Implementation-Version");
+                if (optifine && base.startsWith("OptiFine_")) {
+                    version = base.substring("OptiFine_".length());
+                }
+                all.add(new ModContainer(base.toLowerCase(java.util.Locale.ROOT), name,
+                        version == null ? "?" : version, null, optifine ? "OptiFine" : null,
+                        optifine ? "sp614x" : null, null, optifine ? "https://optifine.net" : null, null, null, file,
+                        false, "forge"));
+            } catch (IOException ignored) {
+                continue;
+            }
         }
     }
 
@@ -226,15 +279,39 @@ public class NyxModMenuScreen extends class_388 {
             drawRow(font, visible.get(i), y, mouseX, mouseY);
         }
         Gfx.noScissor();
-        int max = maxListScroll();
-        if (max > 0) {
-            int trackX = listX + listW - 4;
-            Gfx.rect(trackX, LIST_TOP, 4, viewH, 0xFF000000);
-            int thumb = Math.max(16, viewH * viewH / (visible.size() * ROW));
-            int thumbY = LIST_TOP + (viewH - thumb) * listScroll / max;
-            Gfx.rect(trackX, thumbY, 4, thumb, 0xFF808080);
-            Gfx.rect(trackX, thumbY, 3, thumb - 1, 0xFFC0C0C0);
+        if (maxListScroll() > 0) {
+            int trackX = listX + listW - BAR_W;
+            int thumb = thumbHeight();
+            int thumbY = thumbY();
+            boolean active = barDragging || overBar(mouseX, mouseY);
+            Gfx.rect(trackX, LIST_TOP, BAR_W, viewH, 0xFF000000);
+            Gfx.rect(trackX, thumbY, BAR_W, thumb, active ? 0xFF57197F : 0xFF808080);
+            Gfx.rect(trackX, thumbY, BAR_W - 1, thumb - 1, active ? 0xFF8A3FBF : 0xFFC0C0C0);
         }
+    }
+
+    private int thumbHeight() {
+        int viewH = listBottom - LIST_TOP;
+        return Math.min(viewH, Math.max(16, viewH * viewH / Math.max(1, visible.size() * ROW)));
+    }
+
+    private int thumbY() {
+        int max = maxListScroll();
+        int range = listBottom - LIST_TOP - thumbHeight();
+        return LIST_TOP + (max <= 0 ? 0 : range * listScroll / max);
+    }
+
+    private boolean overBar(int mouseX, int mouseY) {
+        return maxListScroll() > 0 && in(mouseX, mouseY, listX + listW - BAR_HIT, LIST_TOP, BAR_HIT, listBottom - LIST_TOP);
+    }
+
+    private void dragBar(int mouseY) {
+        int range = listBottom - LIST_TOP - thumbHeight();
+        if (range <= 0) {
+            return;
+        }
+        int offset = mouseY - barGrab - LIST_TOP;
+        listScroll = Math.max(0, Math.min(maxListScroll(), offset * maxListScroll() / range));
     }
 
     private void drawRow(class_370 font, ModContainer mod, int y, int mouseX, int mouseY) {
@@ -424,24 +501,29 @@ public class NyxModMenuScreen extends class_388 {
         }
         pressedRow = -1;
         dragging = false;
+        barDragging = false;
+        if (overBar(mouseX, mouseY)) {
+            int thumbY = thumbY();
+            int thumb = thumbHeight();
+            barGrab = mouseY >= thumbY && mouseY < thumbY + thumb ? mouseY - thumbY : thumb / 2;
+            barDragging = true;
+            dragBar(mouseY);
+            return;
+        }
         if (in(mouseX, mouseY, listX, LIST_TOP, listW, listBottom - LIST_TOP)) {
             int row = (mouseY - LIST_TOP + listScroll) / ROW;
             pressedRow = row >= 0 && row < visible.size() ? row : -1;
             pressY = mouseY;
-            lastDragY = mouseY;
         }
     }
 
     protected void method_4259(int mouseX, int mouseY, int button, long time) {
-        if (pressedRow < 0 && !dragging) {
+        if (barDragging) {
+            dragBar(mouseY);
             return;
         }
-        if (!dragging && Math.abs(mouseY - pressY) > 3) {
+        if (pressedRow >= 0 && Math.abs(mouseY - pressY) > 3) {
             dragging = true;
-        }
-        if (dragging) {
-            listScroll = Math.max(0, Math.min(maxListScroll(), listScroll - (mouseY - lastDragY)));
-            lastDragY = mouseY;
         }
     }
 
@@ -455,6 +537,7 @@ public class NyxModMenuScreen extends class_388 {
         }
         pressedRow = -1;
         dragging = false;
+        barDragging = false;
     }
 
     public void method_1035() {
