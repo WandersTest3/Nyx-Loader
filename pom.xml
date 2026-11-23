@@ -6,7 +6,7 @@
 
     <groupId>dev.nyx</groupId>
     <artifactId>nyx-parent</artifactId>
-    <version>0.0.11</version>
+    <version>0.0.12</version>
     <packaging>pom</packaging>
     <name>Nyx Parent</name>
 

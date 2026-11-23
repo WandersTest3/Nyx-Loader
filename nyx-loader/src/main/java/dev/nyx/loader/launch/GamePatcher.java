@@ -25,6 +25,8 @@ final class GamePatcher {
     private static final String HOOKS = "dev/nyx/loader/Hooks";
     private static final String FRAME = "dev/nyx/mc171/NyxFrame";
     private static final String MENU = "dev/nyx/mc171/NyxMenuHook";
+    private static final String PACKS = "net/minecraft/class_617";
+    private static final String PACK_HOOK = "dev/nyx/mc171/NyxPackHook";
 
     private static final String INIT = "method_2921";
     private static final String INIT_MARKER = "Pre startup";
@@ -53,7 +55,10 @@ final class GamePatcher {
                 return patchMinecraft(bytes);
             }
             if (name.equals(names.map(MAIN_MENU))) {
-                return patchMainMenu(bytes);
+                return patchMainMenu(bytes, MENU);
+            }
+            if (name.equals(names.map(PACKS))) {
+                return patchMainMenu(bytes, PACK_HOOK);
             }
             if (name.equals(BRAND)) {
                 return patchBrand(bytes);
@@ -166,7 +171,7 @@ final class GamePatcher {
         return write(node);
     }
 
-    private static byte[] patchMainMenu(byte[] bytes) {
+    private static byte[] patchMainMenu(byte[] bytes, String hook) {
         ClassNode node = read(bytes);
         RuntimeNames names = NyxLaunch.names();
         String drawName = names.method(DRAW);
@@ -183,7 +188,7 @@ final class GamePatcher {
                         list.add(new VarInsnNode(Opcodes.ILOAD, 1));
                         list.add(new VarInsnNode(Opcodes.ILOAD, 2));
                         list.add(new VarInsnNode(Opcodes.FLOAD, 3));
-                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "draw", "(L" + screen + ";IIF)V", false));
+                        list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, hook, "draw", "(L" + screen + ";IIF)V", false));
                         method.instructions.insertBefore(insn, list);
                     }
                 }
@@ -195,7 +200,7 @@ final class GamePatcher {
                 list.add(new VarInsnNode(Opcodes.ILOAD, 1));
                 list.add(new VarInsnNode(Opcodes.ILOAD, 2));
                 list.add(new VarInsnNode(Opcodes.ILOAD, 3));
-                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MENU, "click", "(L" + screen + ";III)Z", false));
+                list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, hook, "click", "(L" + screen + ";III)Z", false));
                 list.add(new JumpInsnNode(Opcodes.IFEQ, proceed));
                 list.add(new InsnNode(Opcodes.RETURN));
                 list.add(proceed);

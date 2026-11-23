@@ -116,6 +116,10 @@ public final class AccessWidener {
         }
     }
 
+    public Set<String> targets() {
+        return java.util.Collections.unmodifiableSet(targets);
+    }
+
     public boolean isEmpty() {
         return targets.isEmpty();
     }

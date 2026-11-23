@@ -4,7 +4,7 @@
 
 Mod loader client-side para Minecraft Java Edition. Em desenvolvimento.
 
-**Versão atual: 0.0.11**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
+**Versão atual: 0.0.12**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
 
 ## Como funciona
 
@@ -32,12 +32,20 @@ Desde a 0.0.10, quando o Forge 1.7.10 (10.13.4.1614) está nas bibliotecas, o Ny
 - O ModMenu lista mods Forge (tag verde), Fabric (laranja) e Nyx (azul).
 - Na primeira execução com Forge, o Nyx cria `config/splash.properties` com `enabled=false`, porque a tela de splash do Forge costuma travar em launchers Android.
 
+## Novidades da 0.0.12
+
+- **Mixin sem reiniciar**: mods com mixins agora carregam ao vivo. O Nyx aplica o mixin e redefine a classe já carregada com `Instrumentation.redefineClasses` (o agente se anexa ao próprio processo). Métodos novos, campos `@Unique`, lambdas e interfaces (accessors/duck) são tratados movendo o código novo para uma classe auxiliar. Não dá para aplicar ao vivo: mudança em `<clinit>`, na superclasse ou nos modificadores da classe, chamadas `super` em handlers, e access wideners em classes já carregadas. Nesses casos o mod pede reinício e diz o motivo. Instâncias já criadas não recebem o valor inicial de campos novos. Depende de a JVM permitir o auto-anexo (`jdk.attach`); sem isso o mod pede reinício.
+- **CurseForge**: a tela de download tem dois filtros, o do site (MR/CF) e o do loader. O CurseForge exige uma chave de API gratuita (console.curseforge.com): copie e toque em **Colar chave**; ela fica em `nyx/curseforge.key`.
+- **Atualizar mod**: botão **Atualizar** no ModMenu. Procura a versão mais nova pelo SHA-1 (Modrinth) ou pela impressão digital do arquivo (CurseForge), baixa a nova e apaga a antiga. A nova versão vale depois de reiniciar.
+- **Descrição e galeria**: ao selecionar um mod, a descrição mostra as imagens e a galeria do projeto (WebP incluído, decodificado com TwelveMonkeys).
+- **Texturas**: a tela de resource packs ganhou o botão **Baixar**, que busca texturas no Modrinth e no CurseForge e salva em `resourcepacks/`.
+
 ## Novidades da 0.0.11
 
 - **Cache de classes**: o resultado das transformações (Forge, OptiFine, remapeamento, patches do Nyx) fica em `.nyx/class-cache/` e é reaproveitado na próxima abertura. Classes alteradas por Mixin não entram no cache. O cache é descartado quando muda algum arquivo em `mods/`, o classpath, a configuração em `config/` ou a versão do Nyx, e também quando a abertura anterior não chegou ao menu principal. Desligue com `class-cache=false` em `config/nyx/loader.properties`.
 - **Recuperação de crash**: quando o jogo crasha no cliente, o Nyx salva o relatório em `crash-reports/`, aponta o provável mod culpado (pela pilha do erro e pelos handlers de Mixin) e mantém o jogo aberto. Dentro do mundo, a tela é fechada e a mensagem aparece no chat. Fora do mundo, ou se o servidor integrado crashar, o mundo é fechado e uma tela mostra o culpado e o trecho do erro. Se o crash envolver shaders do OptiFine (ou acontecer até 60 s depois de trocar de shader), o shader é desativado e salvo como `OFF`. Depois de 3 crashes em 30 s o Nyx desiste e o jogo fecha como antes. Desligue com `crash-recovery=false` em `config/nyx/loader.properties`.
 - **Configurações no ModMenu**: ao passar o mouse no ícone de um mod que tem tela de configuração, o ícone escurece 25% e mostra três barras; clicar abre as configurações. O mod selecionado também ganha um botão no canto superior direito dos detalhes. Funciona com `guiFactory` do Forge, entrypoint `modmenu` de mods Fabric, OptiFine (abre as configurações de vídeo) e mods do Nyx.
-- **Baixar mods do Modrinth**: o botão **Baixar mods** no ModMenu pesquisa mods com versão para 1.7.10 (Forge e Fabric/Legacy Fabric), baixa a versão mais nova com dependências obrigatórias e confere o SHA-1. Mods do Nyx sem mixins e mods Fabric só de cliente (apenas entrypoints `client`/`modmenu`, sem mixins, access widener ou jar-in-jar) carregam na hora, sem reiniciar. Mods Forge e mods com mixins pedem reinício.
+- **Baixar mods do Modrinth**: o botão **Baixar mods** no ModMenu pesquisa mods com versão para 1.7.10 (Forge e Fabric/Legacy Fabric), baixa a versão mais nova com dependências obrigatórias e confere o SHA-1. Mods do Nyx sem mixins e mods Fabric só de cliente (apenas entrypoints `client`/`modmenu`, sem mixins, access widener ou jar-in-jar) carregam na hora, sem reiniciar. Mods Forge pedem reinício; mods com mixins carregam ao vivo quando o mixin permite (ver 0.0.12).
 
 ## Compatibilidade com Fabric
 
@@ -166,14 +174,15 @@ A saída fica em `dist/`. O GitHub Actions faz o mesmo a cada push e, ao enviar 
 
 O `Nyx-1.7.10.json` tem a versão vanilla no patch `game` e o Nyx no patch `nyx` (`mainClass` `dev.nyx.loader.launch.NyxMain`, `javaVersion` 21).
 
-## Limitações da 0.0.11
+## Limitações da 0.0.12
 
 - Somente Minecraft 1.7.10 e somente cliente.
 - Forge: testado com Biomes O' Plenty 2.1.0 (mundo do tipo Biomes O' Plenty criado). Coremods que dependem de detalhes do LaunchWrapper original ou do Java 8 podem falhar; mods Forge que usam Mixin próprio (MixinTweaker) não têm o tweaker carregado.
 - Precisa de Java 21 ou mais novo.
 - Mods Fabric precisam ser feitos para 1.7.10 (Legacy Fabric). Mods para outras versões são recusados pelo `depends` ou falham ao carregar.
 - Resolução de dependências simplificada: em cada id fica a maior versão compatível. Mods dentro de outros (jar-in-jar) que não servem para 1.7.10 são ignorados.
-- Mods instalados pelo Modrinth que registram conteúdo, usam mixins ou são do Forge só carregam depois de reiniciar o Minecraft. Os ícones do Modrinth vêm em WebP, que o Java não lê, então a lista usa o ícone padrão.
+- Mods baixados que registram conteúdo na inicialização, são do Forge ou têm mixins que não podem ser aplicados ao vivo só carregam depois de reiniciar o Minecraft.
+- CurseForge: arquivos com download bloqueado pelo autor usam o CDN público e podem falhar. A busca por impressão digital (Atualizar) e o CurseForge em geral não foram testados com a API real.
 - A recuperação de crash não cobre crashes durante a abertura do jogo nem `OutOfMemoryError`.
 - Testado em Linux com Java 21: Legacy Fabric API 1.13.5, Omnilook, MenuFPSUnlocker, Exit Confirmation, Legacy Fixes e Perspective Nametag carregaram e um mundo foi criado. Em launchers Android ainda não foi testado.
 

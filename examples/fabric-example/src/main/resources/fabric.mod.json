@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "nyx-fabric-example",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "name": "Nyx Fabric Example",
   "description": "Mod Fabric de exemplo: escreve um texto com o FPS no menu principal usando Mixin e um access widener.",
   "authors": ["Wanders_Test3"],

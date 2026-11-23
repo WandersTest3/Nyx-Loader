@@ -381,7 +381,53 @@ public final class NyxRuntime {
         return NYX_WIDENERS.get(modId);
     }
 
+    private static final String HOT_TEST = System.getProperty("nyx.hottest");
+    private static long hotTestPoll;
+
+    private static void pollHotTest() {
+        long now = System.currentTimeMillis();
+        if (now - hotTestPoll < 500L) {
+            return;
+        }
+        hotTestPoll = now;
+        File trigger = new File(HOT_TEST);
+        if (!trigger.isFile()) {
+            return;
+        }
+        try {
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(trigger.toPath());
+            trigger.delete();
+            for (String line : lines) {
+                if (line.trim().startsWith("screen:")) {
+                    try {
+                        Class.forName("dev.nyx.mc171.NyxPackHook", true, classLoader.asClassLoader())
+                                .getDeclaredMethod("devOpen", String.class).invoke(null, line.trim().substring(7));
+                        log("[hottest] opened " + line.trim());
+                    } catch (Throwable error) {
+                        log("[hottest] could not open " + line.trim() + ": " + error);
+                    }
+                } else if (line.trim().startsWith("new:")) {
+                    try {
+                        Object created = Class.forName(line.trim().substring(4), true, classLoader.asClassLoader())
+                                .getDeclaredConstructor().newInstance();
+                        log("[hottest] created " + created.getClass().getName());
+                    } catch (Throwable error) {
+                        log("[hottest] could not create " + line.trim() + ": " + error);
+                    }
+                } else if (!line.trim().isEmpty()) {
+                    HotLoader.Result result = HotLoader.load(new File(line.trim()));
+                    log("[hottest] " + line.trim() + " -> loaded=" + result.loaded + " reason=" + result.reason);
+                }
+            }
+        } catch (java.io.IOException error) {
+            log("[hottest] " + error);
+        }
+    }
+
     public static void frame(boolean inWorld, Object screen) {
+        if (HOT_TEST != null) {
+            pollHotTest();
+        }
         Runnable task;
         int budget = 256;
         while (budget-- > 0 && (task = RENDER_QUEUE.poll()) != null) {
@@ -478,6 +524,28 @@ public final class NyxRuntime {
         if (mod == null) {
             throw new IOException("not a loadable Nyx mod");
         }
+        String blocker = null;
+        String widener = NYX_WIDENERS.get(mod.id);
+        String[] mixins = NYX_MIXINS.get(mod.id);
+        if (widener != null) {
+            blocker = dev.nyx.loader.hot.HotAccess.apply(file, widener, mod.id);
+        }
+        if (blocker == null && mixins != null) {
+            java.util.List<dev.nyx.loader.hot.HotMixin.Spec> specs = new java.util.ArrayList<dev.nyx.loader.hot.HotMixin.Spec>();
+            for (String config : mixins) {
+                if (!config.isEmpty()) {
+                    specs.add(new dev.nyx.loader.hot.HotMixin.Spec(config, mod.id,
+                            org.spongepowered.asm.mixin.FabricUtil.COMPATIBILITY_LATEST));
+                }
+            }
+            blocker = dev.nyx.loader.hot.HotMixin.apply(specs);
+        }
+        if (blocker != null) {
+            MODS.remove(mod);
+            NYX_MIXINS.remove(mod.id);
+            NYX_WIDENERS.remove(mod.id);
+            throw new HotLoader.Blocked("mixin: " + blocker);
+        }
         initialize(mod);
         return mod;
     }
@@ -491,12 +559,6 @@ public final class NyxRuntime {
             Properties properties = new Properties();
             try (InputStream input = jar.getInputStream(entry)) {
                 properties.load(input);
-            }
-            if (value(properties, "mixins") != null) {
-                return "mixins";
-            }
-            if (value(properties, "accessWidener") != null) {
-                return "access widener";
             }
             String id = value(properties, "id");
             if (id != null && isNyxModLoaded(id)) {
@@ -535,10 +597,6 @@ public final class NyxRuntime {
             }
             String mixins = value(properties, "mixins");
             String widener = value(properties, "accessWidener");
-            if (runtime && (mixins != null || widener != null)) {
-                log("Skipping " + file.getName() + ": mods with mixins or an access widener need a restart");
-                return null;
-            }
             if (mixins != null) {
                 NYX_MIXINS.put(id, mixins.split("\\s*,\\s*"));
             }

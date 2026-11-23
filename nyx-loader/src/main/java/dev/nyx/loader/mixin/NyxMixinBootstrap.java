@@ -101,7 +101,7 @@ public final class NyxMixinBootstrap {
         NyxRuntime.log("Mixin ready with " + count + " config(s)");
     }
 
-    private static int compatibility(FabricModContainer mod) {
+    public static int compatibility(FabricModContainer mod) {
         Version min = null;
         for (ModDependency dependency : mod.getMetadata().getDependencies()) {
             String id = dependency.getModId();

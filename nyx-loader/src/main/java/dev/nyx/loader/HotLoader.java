@@ -3,6 +3,9 @@ package dev.nyx.loader;
 import dev.nyx.loader.fabric.FabricModContainer;
 import dev.nyx.loader.fabric.FabricModMetadata;
 import dev.nyx.loader.fabric.NyxFabricLoader;
+import dev.nyx.loader.hot.HotAccess;
+import dev.nyx.loader.hot.HotMixin;
+import dev.nyx.loader.mixin.NyxMixinBootstrap;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,6 +43,12 @@ public final class HotLoader {
         }
     }
 
+    public static final class Blocked extends IOException {
+        public Blocked(String reason) {
+            super(reason);
+        }
+    }
+
     public static Result load(File file) {
         try (ZipFile zip = new ZipFile(file)) {
             if (zip.getEntry("nyx.mod.properties") != null) {
@@ -58,6 +67,8 @@ public final class HotLoader {
                 return new Result(false, "forge", null);
             }
             return new Result(false, "unknown", null);
+        } catch (Blocked blocked) {
+            return new Result(false, blocked.getMessage(), null);
         } catch (Throwable error) {
             NyxRuntime.log("Could not load " + file.getName() + " at runtime: " + error);
             error.printStackTrace();
@@ -79,6 +90,24 @@ public final class HotLoader {
         }
         NyxRuntime.getClassLoader().addURL(file.toURI().toURL());
         FabricModContainer container = new FabricModContainer(metadata, file.toPath(), false, null);
+        if (metadata.getAccessWidener() != null) {
+            String widened = HotAccess.apply(file, metadata.getAccessWidener(), metadata.getId());
+            if (widened != null) {
+                return new Result(false, "mixin: " + widened, null);
+            }
+        }
+        List<String> configs = metadata.getMixinConfigs(EnvType.CLIENT);
+        if (!configs.isEmpty()) {
+            List<HotMixin.Spec> specs = new java.util.ArrayList<HotMixin.Spec>();
+            int compatibility = NyxMixinBootstrap.compatibility(container);
+            for (String config : configs) {
+                specs.add(new HotMixin.Spec(config, metadata.getId(), compatibility));
+            }
+            String refused = HotMixin.apply(specs);
+            if (refused != null) {
+                return new Result(false, "mixin: " + refused, null);
+            }
+        }
         NyxFabricLoader loader = NyxFabricLoader.get();
         loader.addRuntimeMod(container);
         ModContainer listed = NyxRuntime.toEntry(container);
@@ -96,12 +125,6 @@ public final class HotLoader {
         }
         if (metadata.getEnvironment() == ModEnvironment.SERVER) {
             return "server only";
-        }
-        if (!metadata.getMixinConfigs(EnvType.CLIENT).isEmpty()) {
-            return "mixins";
-        }
-        if (metadata.getAccessWidener() != null) {
-            return "access widener";
         }
         if (!metadata.getJars().isEmpty()) {
             return "nested jars";

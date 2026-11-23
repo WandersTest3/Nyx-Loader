@@ -160,9 +160,10 @@ public final class Gfx {
             });
 
     public static int remoteIcon(String url) {
-        if (url == null || url.isEmpty() || url.toLowerCase(java.util.Locale.ROOT).endsWith(".webp")) {
+        if (url == null || url.isEmpty()) {
             return defaultIcon();
         }
+        webp();
         Integer cached = REMOTE.get(url);
         if (cached != null) {
             return cached.intValue() < 0 ? defaultIcon() : cached.intValue();
@@ -190,6 +191,124 @@ public final class Gfx {
             });
         }
         return defaultIcon();
+    }
+
+    private static boolean webpDone;
+
+    private static synchronized void webp() {
+        if (webpDone) {
+            return;
+        }
+        webpDone = true;
+        try {
+            Class<?> type = Class.forName("com.twelvemonkeys.imageio.plugins.webp.WebPImageReaderSpi");
+            javax.imageio.spi.IIORegistry.getDefaultInstance()
+                    .registerServiceProvider((javax.imageio.spi.ImageReaderSpi) type.getDeclaredConstructor().newInstance());
+        } catch (Throwable error) {
+            NyxRuntime.log("WebP decoder unavailable: " + error);
+        }
+    }
+
+    private static final Map<String, int[]> IMAGES = new java.util.concurrent.ConcurrentHashMap<String, int[]>();
+    private static final Map<String, BufferedImage> IMAGE_DECODED = new java.util.concurrent.ConcurrentHashMap<String, BufferedImage>();
+    private static final java.util.Set<String> IMAGE_LOADING = java.util.Collections.newSetFromMap(
+            new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+
+    public static int[] remoteImage(String url) {
+        int[] cached = IMAGES.get(url);
+        if (cached != null) {
+            return cached;
+        }
+        BufferedImage image = IMAGE_DECODED.remove(url);
+        if (image != null) {
+            int id = upload(image, true);
+            int[] entry = new int[] {id, image.getWidth(), image.getHeight()};
+            IMAGES.put(url, entry);
+            return entry;
+        }
+        if (IMAGE_LOADING.add(url)) {
+            webp();
+            ICON_LOADER.execute(() -> {
+                BufferedImage decoded = null;
+                try {
+                    byte[] data = dev.nyx.loader.modrinth.Modrinth.fetchBytes(url, 8 * 1024 * 1024);
+                    decoded = fit(ImageIO.read(new java.io.ByteArrayInputStream(data)), 512);
+                } catch (Throwable error) {
+                    NyxRuntime.log("Could not load image " + url + ": " + error);
+                }
+                if (decoded != null) {
+                    IMAGE_DECODED.put(url, decoded);
+                } else {
+                    IMAGES.put(url, new int[] {0, 0, 0});
+                }
+            });
+        }
+        return null;
+    }
+
+    public static void releaseImages() {
+        for (int[] entry : IMAGES.values()) {
+            if (entry[0] != 0) {
+                GL11.glDeleteTextures(entry[0]);
+            }
+        }
+        IMAGES.clear();
+        IMAGE_DECODED.clear();
+        IMAGE_LOADING.clear();
+    }
+
+    private static BufferedImage fit(BufferedImage image, int maxWidth) {
+        if (image == null) {
+            return null;
+        }
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width <= maxWidth) {
+            return image;
+        }
+        int targetW = maxWidth;
+        int targetH = Math.max(1, height * maxWidth / width);
+        BufferedImage result = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < targetH; y++) {
+            int y0 = y * height / targetH;
+            int y1 = Math.max(y0 + 1, (y + 1) * height / targetH);
+            for (int x = 0; x < targetW; x++) {
+                int x0 = x * width / targetW;
+                int x1 = Math.max(x0 + 1, (x + 1) * width / targetW);
+                long a = 0, r = 0, g = 0, b = 0;
+                int n = 0;
+                for (int yy = y0; yy < y1; yy++) {
+                    for (int xx = x0; xx < x1; xx++) {
+                        int p = image.getRGB(xx, yy);
+                        a += p >>> 24;
+                        r += p >> 16 & 255;
+                        g += p >> 8 & 255;
+                        b += p & 255;
+                        n++;
+                    }
+                }
+                result.setRGB(x, y, (int) (a / n) << 24 | (int) (r / n) << 16 | (int) (g / n) << 8 | (int) (b / n));
+            }
+        }
+        return result;
+    }
+
+    public static void textureRect(int id, int x, int y, int width, int height) {
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
+        GL11.glBegin(GL11.GL_QUADS);
+        GL11.glTexCoord2f(0.0F, 1.0F);
+        GL11.glVertex2f(x, y + height);
+        GL11.glTexCoord2f(1.0F, 1.0F);
+        GL11.glVertex2f(x + width, y + height);
+        GL11.glTexCoord2f(1.0F, 0.0F);
+        GL11.glVertex2f(x + width, y);
+        GL11.glTexCoord2f(0.0F, 0.0F);
+        GL11.glVertex2f(x, y);
+        GL11.glEnd();
     }
 
     private static BufferedImage shrink(BufferedImage image, int size) {
@@ -262,6 +381,10 @@ public final class Gfx {
     }
 
     private static int upload(BufferedImage image) {
+        return upload(image, false);
+    }
+
+    private static int upload(BufferedImage image, boolean smooth) {
         if (image == null) {
             return 0;
         }
@@ -278,8 +401,8 @@ public final class Gfx {
         buffer.flip();
         int id = GL11.glGenTextures();
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
-        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
-        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, smooth ? GL11.GL_LINEAR : GL11.GL_NEAREST);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, smooth ? GL11.GL_LINEAR : GL11.GL_NEAREST);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL11.GL_CLAMP);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_CLAMP);
         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, width, height, 0, GL11.GL_RGBA,

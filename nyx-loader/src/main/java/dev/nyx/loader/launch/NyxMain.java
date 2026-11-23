@@ -62,6 +62,7 @@ public final class NyxMain {
     private static final java.io.PrintStream ORIGINAL_ERR = System.err;
 
     public static void main(String[] args) throws Throwable {
+        dev.nyx.loader.hot.HotAgent.prepare();
         try {
             run(args);
         } catch (Throwable error) {

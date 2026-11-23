@@ -118,21 +118,35 @@ public final class NyxLaunch {
         IMixinTransformer transformer = mixinTransformer;
         if (withMixin && mixinReady && transformer != null && !name.startsWith("org.spongepowered.")
                 && !name.startsWith("com.llamalad7.mixinextras.")) {
-            try {
-                byte[] before = result;
-                result = transformer.transformClassBytes(name, name, result);
-                if (result != before && !java.util.Arrays.equals(result, before)) {
-                    ClassCache.taint();
-                }
-                if (forge) {
-                    result = dev.nyx.loader.forge.ForgeFixes.removeUnusedMixinHandlers(name, before, result);
-                }
-            } catch (RuntimeException | Error error) {
-                NyxRuntime.log("Mixin failed to transform " + name + ": " + error);
-                throw error;
-            }
+            result = applyMixin(name, result, true);
+        }
+        if (withMixin && dev.nyx.loader.hot.HotInterfaces.active()) {
+            result = dev.nyx.loader.hot.HotInterfaces.transform(result);
         }
         return result;
+    }
+
+    public static IMixinTransformer mixinTransformer() {
+        return mixinTransformer;
+    }
+
+    public static byte[] applyMixin(String name, byte[] before, boolean live) {
+        IMixinTransformer transformer = mixinTransformer;
+        try {
+            byte[] result = transformer.transformClassBytes(name, name, before);
+            boolean changed = result != before && !java.util.Arrays.equals(result, before);
+            if (forge) {
+                result = dev.nyx.loader.forge.ForgeFixes.removeUnusedMixinHandlers(name, before, result);
+            }
+            if (live && changed) {
+                ClassCache.taint();
+                dev.nyx.loader.hot.HotState.record(name, result);
+            }
+            return result;
+        } catch (RuntimeException | Error error) {
+            NyxRuntime.log("Mixin failed to transform " + name + ": " + error);
+            throw error;
+        }
     }
 
     static boolean contains(byte[] haystack, byte[] needle) {

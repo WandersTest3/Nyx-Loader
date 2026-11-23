@@ -139,6 +139,7 @@ public class NyxModMenuScreen extends class_388 {
 
     public void method_1025(int mouseX, int mouseY, float partialTicks) {
         layout();
+        tipLabel = null;
         class_370 font = field_1229.field_3814;
         Gfx.gradient(0, 0, field_1230, field_1231, 0xFF2B0F3F, 0xFF0B0B10);
         drawTitle(font);
@@ -149,6 +150,7 @@ public class NyxModMenuScreen extends class_388 {
         drawDetails(font, mouseX, mouseY);
         drawButtons(font, mouseX, mouseY);
         drawToast(font);
+        drawTip(font);
     }
 
     private void text(class_370 font, String value, int x, int y, int color) {
@@ -191,13 +193,25 @@ public class NyxModMenuScreen extends class_388 {
             Gfx.rect(filterX + SEARCH_H - 6, SEARCH_Y + 2, 4, 4, 0xFF55FF55);
         }
         if (hover) {
-            String label = Lang.t(filter == 0 ? "filter_all" : filter == 1 ? "filter_mods" : "filter_libs");
-            int width = font.method_954(label);
-            int x = Math.min(filterX, field_1230 - width - 10);
-            Gfx.rect(x, SEARCH_Y + SEARCH_H + 2, width + 6, 12, 0xF0100010);
-            Gfx.border(x, SEARCH_Y + SEARCH_H + 2, width + 6, 12, 0xFF57197F);
-            text(font, label, x + 3, SEARCH_Y + SEARCH_H + 4, 0xFFFFFFFF);
+            tipLabel = Lang.t(filter == 0 ? "filter_all" : filter == 1 ? "filter_mods" : "filter_libs");
+            tipFilterX = filterX;
         }
+    }
+
+    private String tipLabel;
+    private int tipFilterX;
+
+    private void drawTip(class_370 font) {
+        if (tipLabel == null) {
+            return;
+        }
+        int width = font.method_954(tipLabel);
+        int x = Math.min(tipFilterX, field_1230 - width - 10);
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        Gfx.rect(x, SEARCH_Y + SEARCH_H + 2, width + 6, 12, 0xF0100010);
+        Gfx.border(x, SEARCH_Y + SEARCH_H + 2, width + 6, 12, 0xFF57197F);
+        text(font, tipLabel, x + 3, SEARCH_Y + SEARCH_H + 4, 0xFFFFFFFF);
+        tipLabel = null;
     }
 
     private int maxListScroll() {
@@ -325,11 +339,13 @@ public class NyxModMenuScreen extends class_388 {
         if (mod.authors != null) {
             text(font, font.method_955(Lang.t("by") + mod.authors, rightW - 40), textX, SEARCH_Y + 23, 0xFF9A9A9A);
         }
-        int half = (rightW - 4) / 2;
         int linkY = LIST_TOP - 2;
-        drawLink(font, Lang.t("site"), rightX, linkY, half, mod.website != null, mouseX, mouseY);
-        drawLink(font, Lang.t("issues"), rightX + half + 4, linkY, rightW - half - 4, mod.issues != null, mouseX,
-                mouseY);
+        int[] cols = linkColumns(mod);
+        drawLink(font, Lang.t("site"), cols[0], linkY, cols[1], mod.website != null, mouseX, mouseY);
+        drawLink(font, Lang.t("issues"), cols[2], linkY, cols[3], mod.issues != null, mouseX, mouseY);
+        if (cols.length > 4) {
+            drawLink(font, Lang.t("update"), cols[4], linkY, cols[5], !updating, mouseX, mouseY);
+        }
         int detailTop = linkY + BUTTON_H + 4;
         Gfx.rect(rightX, detailTop - 2, rightW, 1, 0xFF4A4A4A);
         int viewH = listBottom - detailTop;
@@ -371,6 +387,61 @@ public class NyxModMenuScreen extends class_388 {
         y += 12;
         detailHeight = y - start;
         Gfx.noScissor();
+    }
+
+    private boolean updating;
+
+    private int[] linkColumns(ModContainer mod) {
+        if (!updatable(mod)) {
+            int half = (rightW - 4) / 2;
+            return new int[] {rightX, half, rightX + half + 4, rightW - half - 4};
+        }
+        int third = (rightW - 8) / 3;
+        return new int[] {rightX, third, rightX + third + 4, third, rightX + 2 * (third + 4), rightW - 2 * (third + 4)};
+    }
+
+    private static boolean updatable(ModContainer mod) {
+        return mod.file != null && !mod.library && mod.file.isFile()
+                && mod.file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".jar")
+                && mod.file.getAbsoluteFile().getParentFile().equals(NyxRuntime.getModsDirectory().getAbsoluteFile());
+    }
+
+    private void update(ModContainer mod) {
+        if (updating) {
+            return;
+        }
+        updating = true;
+        showToast(Lang.t("update_checking"));
+        toastUntil = Long.MAX_VALUE;
+        final java.io.File jar = mod.file;
+        final java.util.List<String> loaders = "forge".equals(mod.kind) ? java.util.Arrays.asList("forge")
+                : "fabric".equals(mod.kind) ? java.util.Arrays.asList("legacy-fabric", "fabric")
+                : java.util.Arrays.asList("forge", "legacy-fabric", "fabric");
+        Thread thread = new Thread(() -> {
+            String message;
+            try {
+                dev.nyx.loader.modrinth.Updater.Result result = dev.nyx.loader.modrinth.Updater.check(jar, loaders);
+                if (!result.known) {
+                    message = Lang.t("update_unknown");
+                } else if (result.newer == null) {
+                    message = Lang.t("update_latest");
+                } else {
+                    java.io.File fresh = dev.nyx.loader.modrinth.Updater.apply(result, jar, null);
+                    message = String.format(Lang.t("update_done"), fresh.getName());
+                }
+            } catch (Throwable error) {
+                NyxRuntime.log("Update of " + mod.id + " failed: " + error);
+                message = Lang.t("update_failed") + error.getMessage();
+            }
+            final String shown = message;
+            NyxRuntime.runOnRenderThread(() -> {
+                updating = false;
+                showToast(shown);
+                toastUntil = System.currentTimeMillis() + 8000L;
+            });
+        }, "Nyx-Update");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private static void bars(int x, int y, int size) {
@@ -502,15 +573,21 @@ public class NyxModMenuScreen extends class_388 {
                 return;
             }
         }
-        int half = (rightW - 4) / 2;
         int linkY = LIST_TOP - 2;
-        if (selected != null && in(mouseX, mouseY, rightX, linkY, half, BUTTON_H)) {
-            openLink(selected.website);
-            return;
-        }
-        if (selected != null && in(mouseX, mouseY, rightX + half + 4, linkY, rightW - half - 4, BUTTON_H)) {
-            openLink(selected.issues);
-            return;
+        if (selected != null) {
+            int[] cols = linkColumns(selected);
+            if (in(mouseX, mouseY, cols[0], linkY, cols[1], BUTTON_H)) {
+                openLink(selected.website);
+                return;
+            }
+            if (in(mouseX, mouseY, cols[2], linkY, cols[3], BUTTON_H)) {
+                openLink(selected.issues);
+                return;
+            }
+            if (cols.length > 4 && in(mouseX, mouseY, cols[4], linkY, cols[5], BUTTON_H)) {
+                update(selected);
+                return;
+            }
         }
         pressedRow = -1;
         dragging = false;

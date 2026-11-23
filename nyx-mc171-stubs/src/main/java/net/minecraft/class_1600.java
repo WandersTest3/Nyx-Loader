@@ -12,6 +12,10 @@ public class class_1600 {
         return null;
     }
 
+    public class_1657 method_5572() {
+        return null;
+    }
+
     public void method_2928(class_388 screen) {
     }
 }

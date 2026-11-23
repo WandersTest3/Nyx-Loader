@@ -149,8 +149,15 @@ public final class ClassCache {
         return TAINTS.get()[0];
     }
 
+    private static final java.util.Set<String> BYPASS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static void bypass(String name) {
+        BYPASS.add(name);
+        PENDING.remove(name);
+    }
+
     public static byte[] get(String name) {
-        if (!active) {
+        if (!active || BYPASS.contains(name)) {
             return null;
         }
         byte[] pending = PENDING.get(name);
@@ -172,7 +179,8 @@ public final class ClassCache {
         if (active) {
             transformNanos.addAndGet(System.nanoTime() - started);
         }
-        if (!active || bytes == null || TAINTS.get()[0] != taintsBefore || INDEX.containsKey(name)) {
+        if (!active || bytes == null || TAINTS.get()[0] != taintsBefore || INDEX.containsKey(name)
+                || BYPASS.contains(name)) {
             return;
         }
         synchronized (ClassCache.class) {

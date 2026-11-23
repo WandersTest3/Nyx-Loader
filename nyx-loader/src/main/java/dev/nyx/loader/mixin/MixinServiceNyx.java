@@ -229,7 +229,7 @@ public class MixinServiceNyx implements IMixinService, IClassProvider, IClassByt
 
     @Override
     public boolean isClassLoaded(String className) {
-        return NyxLaunch.gameLoader().isClassLoadedHere(className);
+        return !dev.nyx.loader.hot.HotMixin.isApplying() && NyxLaunch.gameLoader().isClassLoadedHere(className);
     }
 
     @Override

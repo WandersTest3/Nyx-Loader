@@ -22,6 +22,12 @@ LIBRARIES = [
     ("org.ow2.asm:asm-analysis:9.8", CENTRAL, "b9747a320844b6cb1eacd90d8ecfd260a16c01d3", 35151),
     ("net.fabricmc:sponge-mixin:0.17.5+mixin.0.8.7", FABRIC, "0cef8519a91129d0c21fa03bb9378f0e8ca810e5", 1551593),
     ("net.legacyfabric:intermediary:1.7.10", LEGACY_FABRIC, "101f7a07dd6adfd26b1e180a13235104b6d954ae", 113936),
+    ("com.twelvemonkeys.imageio:imageio-webp:3.12.0", CENTRAL, "390599d525f6af2af4d94bd549411d6e1d47ea07", 79713),
+    ("com.twelvemonkeys.imageio:imageio-core:3.12.0", CENTRAL, "4a57990b52fd36fe60c356a3e5fd57054a85a502", 119909),
+    ("com.twelvemonkeys.imageio:imageio-metadata:3.12.0", CENTRAL, "6997264db25396a2c8fddf6520174c9a907e3403", 83615),
+    ("com.twelvemonkeys.common:common-lang:3.12.0", CENTRAL, "170b88f23daa4d4d64189285ebebe4eb59d51c93", 121817),
+    ("com.twelvemonkeys.common:common-io:3.12.0", CENTRAL, "1f739ad65a48fd2bc7b8c0a8bb54218c0e219c84", 92346),
+    ("com.twelvemonkeys.common:common-image:3.12.0", CENTRAL, "1ffc9fb885eea7f0bdab0f6e7f780d3e41b5ad01", 79655),
 ]
 
 
