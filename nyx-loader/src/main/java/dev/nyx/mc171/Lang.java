@@ -42,6 +42,54 @@ public final class Lang {
         put("by", "Por ", "By ");
         put("file", "Arquivo:", "File:");
         put("no_description", "Sem descri\u00e7\u00e3o.", "No description.");
+        put("on", "Ligado", "On");
+        put("off", "Desligado", "Off");
+        put("config", "Configura\u00e7\u00f5es", "Settings");
+        put("config_none", "Este mod n\u00e3o tem tela de configura\u00e7\u00e3o", "This mod has no settings screen");
+        put("config_failed", "N\u00e3o foi poss\u00edvel abrir as configura\u00e7\u00f5es: ", "Could not open the settings: ");
+        put("dl_open", "Baixar mods", "Get mods");
+        put("dl_folder", "Pasta", "Folder");
+        put("dl_title", "Baixar mods (Modrinth)", "Get mods (Modrinth)");
+        put("dl_search", "Pesquisar no Modrinth...", "Search Modrinth...");
+        put("dl_searching", "Pesquisando...", "Searching...");
+        put("dl_count", "%d de %d mods para 1.7.10", "%d of %d mods for 1.7.10");
+        put("dl_error", "Erro: ", "Error: ");
+        put("dl_more", "Mais resultados", "More results");
+        put("dl_back", "Voltar", "Back");
+        put("dl_hint", "Escolha um mod na lista. S\u00f3 aparecem mods do Modrinth com vers\u00e3o para 1.7.10.",
+                "Pick a mod from the list. Only Modrinth mods with a 1.7.10 version are shown.");
+        put("dl_install", "Baixar", "Download");
+        put("dl_installed", "Instalado", "Installed");
+        put("dl_loaders", "Loaders:", "Loaders:");
+        put("dl_filter_all", "Filtro: todos", "Filter: all");
+        put("dl_filter_forge", "Filtro: Forge", "Filter: Forge");
+        put("dl_filter_fabric", "Filtro: Fabric", "Filter: Fabric");
+        put("dl_resolving", "Procurando vers\u00e3o...", "Finding a version...");
+        put("dl_no_version", "Nenhuma vers\u00e3o para 1.7.10 com Forge ou Fabric.", "No 1.7.10 version for Forge or Fabric.");
+        put("dl_dependency", "Baixando depend\u00eancia", "Downloading dependency");
+        put("dl_downloading", "Baixando", "Downloading");
+        put("dl_loading", "Carregando...", "Loading...");
+        put("dl_already", "J\u00e1 est\u00e1 na pasta de mods.", "Already in the mods folder.");
+        put("dl_loaded", "Instalado e carregado sem reiniciar.", "Installed and loaded without restarting.");
+        put("dl_restart", "Instalado. Reinicie o Minecraft para carregar:", "Installed. Restart Minecraft to load:");
+        put("dl_reason_forge", "mod Forge", "Forge mod");
+        put("dl_reason_mixins", "usa mixins", "uses mixins");
+        put("dl_reason_content", "registra conte\u00fado na inicializa\u00e7\u00e3o", "registers content at startup");
+        put("dl_reason_missing", "precisa de", "needs");
+        put("dl_reason_loaded", "j\u00e1 carregado", "already loaded");
+        put("crash_title", "O Minecraft crashou", "Minecraft crashed");
+        put("crash_saved", "O Nyx evitou que o jogo fechasse.", "Nyx kept the game from closing.");
+        put("crash_chat_stay", "O jogo crashou e foi recuperado.", "The game crashed and was recovered.");
+        put("crash_chat_left", "O jogo crashou e voc\u00ea saiu do mundo para evitar o fechamento.",
+                "The game crashed and you left the world to keep it running.");
+        put("crash_suspect", "Prov\u00e1vel culpado:", "Likely culprit:");
+        put("crash_unknown", "n\u00e3o identificado", "not identified");
+        put("crash_shaders_off", "Shaders desativados:", "Shaders disabled:");
+        put("crash_report", "Relat\u00f3rio:", "Report:");
+        put("crash_error", "Erro:", "Error:");
+        put("crash_menu", "Menu principal", "Main menu");
+        put("crash_copy", "Copiar relat\u00f3rio", "Copy report");
+        put("crash_copied", "Relat\u00f3rio copiado", "Report copied");
     }
 
     private Lang() {

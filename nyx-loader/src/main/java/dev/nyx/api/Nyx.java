@@ -5,7 +5,7 @@ import java.io.File;
 
 public final class Nyx {
 
-    public static final String VERSION = "0.0.10";
+    public static final String VERSION = "0.0.11";
     public static final String MINECRAFT_VERSION = "1.7.10";
 
     private Nyx() {
@@ -49,5 +49,45 @@ public final class Nyx {
 
     public static void log(String message) {
         NyxRuntime.log(message);
+    }
+
+    public static Object getMinecraft() {
+        return NyxRuntime.getGame();
+    }
+
+    public static boolean isRenderThread() {
+        return NyxRuntime.isRenderThread();
+    }
+
+    public static void runOnRenderThread(Runnable task) {
+        NyxRuntime.runOnRenderThread(task);
+    }
+
+    public static void onFrame(Runnable listener) {
+        NyxRuntime.registerFrameListener(listener);
+    }
+
+    public static void onWorldJoin(Runnable listener) {
+        NyxRuntime.registerWorldListener(listener, true);
+    }
+
+    public static void onWorldLeave(Runnable listener) {
+        NyxRuntime.registerWorldListener(listener, false);
+    }
+
+    public static void onScreenChange(ScreenListener listener) {
+        NyxRuntime.registerScreenListener(listener);
+    }
+
+    public static void sendClientMessage(String message) {
+        NyxRuntime.sendClientMessage(message);
+    }
+
+    public static void registerConfigScreen(String modId, ConfigScreenFactory factory) {
+        NyxRuntime.registerConfigScreen(modId, factory);
+    }
+
+    public static long getFrameTimeMillis() {
+        return NyxRuntime.getFrameTimeMillis();
     }
 }

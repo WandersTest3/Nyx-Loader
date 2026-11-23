@@ -113,6 +113,59 @@ public final class NyxFabricLoader implements FabricLoader {
         return result;
     }
 
+    public List<Object> getModEntrypoints(String key, String modId) {
+        List<Object> result = new ArrayList<>();
+        List<Entry> list = entrypoints.get(key);
+        if (list == null) {
+            return result;
+        }
+        for (Entry entry : list) {
+            if (!entry.mod.getMetadata().getId().equals(modId)) {
+                continue;
+            }
+            try {
+                Object value = entry.get(Object.class);
+                if (value != null) {
+                    result.add(value);
+                }
+            } catch (Throwable error) {
+                dev.nyx.loader.NyxRuntime.log("Could not create " + key + " entrypoint of " + modId + ": " + error);
+            }
+        }
+        return result;
+    }
+
+    public synchronized void addRuntimeMod(FabricModContainer mod) {
+        mods.add(mod);
+        modMap.putIfAbsent(mod.getMetadata().getId(), mod);
+        for (String provided : mod.getMetadata().getProvides()) {
+            modMap.putIfAbsent(provided, mod);
+        }
+        for (Map.Entry<String, List<FabricModMetadata.EntrypointDef>> key
+                : mod.getFabricMetadata().getEntrypointDefs().entrySet()) {
+            for (FabricModMetadata.EntrypointDef def : key.getValue()) {
+                entrypoints.computeIfAbsent(key.getKey(), k -> new ArrayList<>()).add(new Entry(mod, def));
+            }
+        }
+    }
+
+    public <T> void invokeModEntrypoints(String key, String modId, Class<T> type, Consumer<? super T> invoker) {
+        List<Entry> list = entrypoints.get(key);
+        if (list == null) {
+            return;
+        }
+        for (Entry entry : new ArrayList<>(list)) {
+            if (!entry.mod.getMetadata().getId().equals(modId)) {
+                continue;
+            }
+            try {
+                invoker.accept(entry.get(type));
+            } catch (Throwable error) {
+                throw new EntrypointException(key, modId, error);
+            }
+        }
+    }
+
     @Override
     public <T> List<EntrypointContainer<T>> getEntrypointContainers(String key, Class<T> type) {
         List<Entry> list = entrypoints.get(key);

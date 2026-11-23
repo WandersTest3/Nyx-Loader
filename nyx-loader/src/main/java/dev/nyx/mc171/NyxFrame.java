@@ -18,6 +18,7 @@ public final class NyxFrame {
     private static int errors;
     private static boolean menuKeyDown;
     private static boolean debugOpened;
+    private static boolean bridged;
 
     private NyxFrame() {
     }
@@ -41,6 +42,13 @@ public final class NyxFrame {
             if (minecraft == null || minecraft.field_3814 == null || !NyxRuntime.isStarted()) {
                 return;
             }
+            if (!bridged) {
+                bridged = true;
+                NyxRuntime.setBridge(new McBridge());
+            }
+            NyxRuntime.frame(minecraft.field_3803 != null, minecraft.field_3816);
+            NyxCrash.watchShaders();
+            NyxCrash.deliverPendingChat(minecraft);
             pollKeys(minecraft);
             debugOpen(minecraft);
             if (NyxRuntime.hasHudRenderers()) {

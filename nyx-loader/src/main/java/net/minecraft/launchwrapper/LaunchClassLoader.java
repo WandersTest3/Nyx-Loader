@@ -188,8 +188,14 @@ public class LaunchClassLoader extends URLClassLoader implements GameLoader {
                 } else if (lastDot > -1) {
                     definePackageIfMissing(packageName);
                 }
-                byte[] transformedClass = runTransformers(untransformedName, transformedName,
-                        getClassBytes(untransformedName), true);
+                byte[] transformedClass = dev.nyx.loader.launch.ClassCache.get(transformedName);
+                if (transformedClass == null) {
+                    int taints = dev.nyx.loader.launch.ClassCache.taints();
+                    long started = System.nanoTime();
+                    transformedClass = runTransformers(untransformedName, transformedName,
+                            getClassBytes(untransformedName), true);
+                    dev.nyx.loader.launch.ClassCache.put(transformedName, transformedClass, taints, started);
+                }
                 if (transformedClass == null) {
                     throw new ClassNotFoundException(name);
                 }

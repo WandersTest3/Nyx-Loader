@@ -105,6 +105,7 @@ public final class NyxLaunch {
             IMixinTransformer generator = mixinTransformer;
             if (withMixin && mixinReady && generator != null && !name.startsWith("org.spongepowered.")
                     && !name.startsWith("com.llamalad7.mixinextras.")) {
+                ClassCache.taint();
                 return generator.transformClassBytes(name, name, null);
             }
             return null;
@@ -120,6 +121,9 @@ public final class NyxLaunch {
             try {
                 byte[] before = result;
                 result = transformer.transformClassBytes(name, name, result);
+                if (result != before && !java.util.Arrays.equals(result, before)) {
+                    ClassCache.taint();
+                }
                 if (forge) {
                     result = dev.nyx.loader.forge.ForgeFixes.removeUnusedMixinHandlers(name, before, result);
                 }

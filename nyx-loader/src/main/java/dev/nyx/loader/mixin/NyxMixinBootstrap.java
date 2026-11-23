@@ -58,14 +58,37 @@ public final class NyxMixinBootstrap {
                 }
             }
         }
-        for (Config raw : Mixins.getConfigs()) {
-            FabricModContainer mod = configToMod.get(raw.getName());
-            if (mod == null) {
+        Map<String, String> nyxConfigs = new HashMap<>();
+        for (dev.nyx.loader.ModContainer mod : NyxRuntime.getMods()) {
+            String[] configs = NyxRuntime.getNyxMixins(mod.id);
+            if (configs == null) {
                 continue;
             }
+            for (String config : configs) {
+                if (config.isEmpty() || configToMod.containsKey(config) || nyxConfigs.putIfAbsent(config, mod.id) != null) {
+                    throw new RuntimeException("Mixin config " + config + " of " + mod.id + " is already in use");
+                }
+                try {
+                    Mixins.addConfiguration(config);
+                    count++;
+                } catch (Throwable error) {
+                    throw new RuntimeException("Error parsing Mixin config " + config + " of " + mod.id, error);
+                }
+            }
+        }
+        for (Config raw : Mixins.getConfigs()) {
             IMixinConfig config = raw.getConfig();
-            config.decorate(FabricUtil.KEY_MOD_ID, mod.getMetadata().getId());
-            config.decorate(FabricUtil.KEY_COMPATIBILITY, compatibility(mod));
+            FabricModContainer mod = configToMod.get(raw.getName());
+            if (mod != null) {
+                config.decorate(FabricUtil.KEY_MOD_ID, mod.getMetadata().getId());
+                config.decorate(FabricUtil.KEY_COMPATIBILITY, compatibility(mod));
+                continue;
+            }
+            String nyxMod = nyxConfigs.get(raw.getName());
+            if (nyxMod != null) {
+                config.decorate(FabricUtil.KEY_MOD_ID, nyxMod);
+                config.decorate(FabricUtil.KEY_COMPATIBILITY, FabricUtil.COMPATIBILITY_LATEST);
+            }
         }
         try {
             Method gotoPhase = MixinEnvironment.class.getDeclaredMethod("gotoPhase", MixinEnvironment.Phase.class);

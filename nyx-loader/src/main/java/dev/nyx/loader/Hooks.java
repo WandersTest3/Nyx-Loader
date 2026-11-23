@@ -67,6 +67,12 @@ public final class Hooks {
             NyxRuntime.log("Game start hook failed: " + error);
             error.printStackTrace();
         }
+        try {
+            NyxRuntime.log("Game started in " + java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime() + " ms");
+        } catch (Throwable ignored) {
+            NyxRuntime.log("Game started");
+        }
+        dev.nyx.loader.launch.ClassCache.markReady();
     }
 
     public static void onClientTick() {

@@ -1,6 +1,9 @@
 package dev.nyx.loader;
 
+import dev.nyx.api.ConfigScreenFactory;
 import dev.nyx.api.HudRenderer;
+import dev.nyx.api.NyxOptions;
+import dev.nyx.api.ScreenListener;
 import dev.nyx.api.Nyx;
 import dev.nyx.api.NyxConfig;
 import dev.nyx.api.NyxGraphics;
@@ -26,11 +29,24 @@ public final class NyxRuntime {
 
     private static final String METADATA_FILE = "nyx.mod.properties";
 
-    private static final List<ModContainer> MODS = new ArrayList<ModContainer>();
+    private static final List<ModContainer> MODS = new CopyOnWriteArrayList<ModContainer>();
     private static final List<ModContainer> BUILTIN = new ArrayList<ModContainer>();
     private static final List<Runnable> TICK_LISTENERS = new CopyOnWriteArrayList<Runnable>();
     private static final List<HudRenderer> HUD_LISTENERS = new CopyOnWriteArrayList<HudRenderer>();
     private static final List<KeyBinding> KEYS = new CopyOnWriteArrayList<KeyBinding>();
+    private static final List<Runnable> FRAME_LISTENERS = new CopyOnWriteArrayList<Runnable>();
+    private static final List<Runnable> JOIN_LISTENERS = new CopyOnWriteArrayList<Runnable>();
+    private static final List<Runnable> LEAVE_LISTENERS = new CopyOnWriteArrayList<Runnable>();
+    private static final List<ScreenListener> SCREEN_LISTENERS = new CopyOnWriteArrayList<ScreenListener>();
+    private static final java.util.Queue<Runnable> RENDER_QUEUE = new java.util.concurrent.ConcurrentLinkedQueue<Runnable>();
+    private static final java.util.Map<String, ConfigScreenFactory> CONFIG_SCREENS = new java.util.concurrent.ConcurrentHashMap<String, ConfigScreenFactory>();
+    private static final java.util.Map<String, NyxOptions> OPTIONS = new java.util.concurrent.ConcurrentHashMap<String, NyxOptions>();
+    private static final java.util.Map<String, String[]> NYX_MIXINS = new java.util.concurrent.ConcurrentHashMap<String, String[]>();
+    private static final java.util.Map<String, String> NYX_WIDENERS = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    private static volatile ClientBridge bridge;
+    private static volatile Thread renderThread;
+    private static boolean worldPresent;
+    private static Object lastScreen;
 
     private static File gameDirectory = new File(".");
     private static GameLoader classLoader;
@@ -68,28 +84,35 @@ public final class NyxRuntime {
         return Collections.unmodifiableList(BUILTIN);
     }
 
-    private static final List<ModContainer> FABRIC = new ArrayList<ModContainer>();
+    private static final List<ModContainer> FABRIC = new CopyOnWriteArrayList<ModContainer>();
+
+    public static void addFabricEntry(ModContainer entry) {
+        FABRIC.add(entry);
+    }
 
     public static void setFabricMods(List<FabricModContainer> mods) {
         FABRIC.clear();
         for (FabricModContainer mod : mods) {
-            if (mod.isBuiltin()) {
-                continue;
+            if (!mod.isBuiltin()) {
+                FABRIC.add(toEntry(mod));
             }
-            ModMetadata meta = mod.getMetadata();
-            List<String> authors = new ArrayList<String>();
-            for (Person person : meta.getAuthors()) {
-                authors.add(person.getName());
-            }
-            boolean library = mod.isNested() || isLibraryBadge(mod);
-            FABRIC.add(new ModContainer(meta.getId(), meta.getName(), meta.getVersion().getFriendlyString(), null,
-                    meta.getDescription().isEmpty() ? null : meta.getDescription(),
-                    authors.isEmpty() ? null : String.join(", ", authors),
-                    meta.getLicense().isEmpty() ? null : String.join(", ", meta.getLicense()),
-                    meta.getContact().get("homepage").orElse(null), meta.getContact().get("issues").orElse(null),
-                    meta.getIconPath(64).orElse(null), mod.getJarPath() == null ? null : mod.getJarPath().toFile(),
-                    library, "fabric"));
         }
+    }
+
+    public static ModContainer toEntry(FabricModContainer mod) {
+        ModMetadata meta = mod.getMetadata();
+        List<String> authors = new ArrayList<String>();
+        for (Person person : meta.getAuthors()) {
+            authors.add(person.getName());
+        }
+        boolean library = mod.isNested() || isLibraryBadge(mod);
+        return new ModContainer(meta.getId(), meta.getName(), meta.getVersion().getFriendlyString(), null,
+                meta.getDescription().isEmpty() ? null : meta.getDescription(),
+                authors.isEmpty() ? null : String.join(", ", authors),
+                meta.getLicense().isEmpty() ? null : String.join(", ", meta.getLicense()),
+                meta.getContact().get("homepage").orElse(null), meta.getContact().get("issues").orElse(null),
+                meta.getIconPath(64).orElse(null), mod.getJarPath() == null ? null : mod.getJarPath().toFile(),
+                library, "fabric");
     }
 
     private static boolean isLibraryBadge(FabricModContainer mod) {
@@ -271,6 +294,136 @@ public final class NyxRuntime {
         TICK_LISTENERS.add(listener);
     }
 
+    public static void setBridge(ClientBridge value) {
+        bridge = value;
+        renderThread = Thread.currentThread();
+    }
+
+    public static Object getGame() {
+        ClientBridge current = bridge;
+        return current == null ? null : current.game();
+    }
+
+    public static boolean isRenderThread() {
+        return renderThread != null && Thread.currentThread() == renderThread;
+    }
+
+    public static void runOnRenderThread(Runnable task) {
+        if (task == null) {
+            throw new IllegalArgumentException("task");
+        }
+        if (isRenderThread()) {
+            task.run();
+        } else {
+            RENDER_QUEUE.add(task);
+        }
+    }
+
+    public static void sendClientMessage(String message) {
+        if (message == null) {
+            return;
+        }
+        runOnRenderThread(() -> {
+            ClientBridge current = bridge;
+            if (current != null) {
+                current.chat(message);
+            } else {
+                log("[chat] " + message);
+            }
+        });
+    }
+
+    public static void registerFrameListener(Runnable listener) {
+        if (listener == null) {
+            throw new IllegalArgumentException("listener");
+        }
+        FRAME_LISTENERS.add(listener);
+    }
+
+    public static void registerWorldListener(Runnable listener, boolean join) {
+        if (listener == null) {
+            throw new IllegalArgumentException("listener");
+        }
+        (join ? JOIN_LISTENERS : LEAVE_LISTENERS).add(listener);
+    }
+
+    public static void registerScreenListener(ScreenListener listener) {
+        if (listener == null) {
+            throw new IllegalArgumentException("listener");
+        }
+        SCREEN_LISTENERS.add(listener);
+    }
+
+    public static void registerConfigScreen(String modId, ConfigScreenFactory factory) {
+        if (modId == null || factory == null) {
+            throw new IllegalArgumentException("modId and factory are required");
+        }
+        CONFIG_SCREENS.put(modId, factory);
+    }
+
+    public static void registerOptions(String modId, NyxOptions options) {
+        OPTIONS.put(modId, options);
+    }
+
+    public static ConfigScreenFactory getConfigScreen(String modId) {
+        return CONFIG_SCREENS.get(modId);
+    }
+
+    public static NyxOptions getOptions(String modId) {
+        return OPTIONS.get(modId);
+    }
+
+    public static String[] getNyxMixins(String modId) {
+        return NYX_MIXINS.get(modId);
+    }
+
+    public static String getNyxAccessWidener(String modId) {
+        return NYX_WIDENERS.get(modId);
+    }
+
+    public static void frame(boolean inWorld, Object screen) {
+        Runnable task;
+        int budget = 256;
+        while (budget-- > 0 && (task = RENDER_QUEUE.poll()) != null) {
+            try {
+                task.run();
+            } catch (Throwable error) {
+                log("Render thread task failed: " + error);
+                error.printStackTrace();
+            }
+        }
+        dispatch(FRAME_LISTENERS, "Frame");
+        if (inWorld != worldPresent) {
+            worldPresent = inWorld;
+            dispatch(inWorld ? JOIN_LISTENERS : LEAVE_LISTENERS, inWorld ? "World join" : "World leave");
+        }
+        if (screen != lastScreen) {
+            Object previous = lastScreen;
+            lastScreen = screen;
+            for (ScreenListener listener : SCREEN_LISTENERS) {
+                try {
+                    listener.onScreenChange(previous, screen);
+                } catch (Throwable error) {
+                    SCREEN_LISTENERS.remove(listener);
+                    log("Screen listener removed after error: " + error);
+                    error.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private static void dispatch(List<Runnable> listeners, String kind) {
+        for (Runnable listener : listeners) {
+            try {
+                listener.run();
+            } catch (Throwable error) {
+                listeners.remove(listener);
+                log(kind + " listener removed after error: " + error);
+                error.printStackTrace();
+            }
+        }
+    }
+
     public static void log(String message) {
         System.out.println("[Nyx] " + message);
     }
@@ -317,11 +470,50 @@ public final class NyxRuntime {
     }
 
     public static void readMod(File file, GameLoader loader) {
+        readMod(file, loader, false);
+    }
+
+    public static synchronized ModContainer loadAtRuntime(File file) throws IOException {
+        ModContainer mod = readMod(file, classLoader, true);
+        if (mod == null) {
+            throw new IOException("not a loadable Nyx mod");
+        }
+        initialize(mod);
+        return mod;
+    }
+
+    public static String runtimeBlocker(File file) {
+        try (JarFile jar = new JarFile(file)) {
+            ZipEntry entry = jar.getEntry(METADATA_FILE);
+            if (entry == null) {
+                return "missing " + METADATA_FILE;
+            }
+            Properties properties = new Properties();
+            try (InputStream input = jar.getInputStream(entry)) {
+                properties.load(input);
+            }
+            if (value(properties, "mixins") != null) {
+                return "mixins";
+            }
+            if (value(properties, "accessWidener") != null) {
+                return "access widener";
+            }
+            String id = value(properties, "id");
+            if (id != null && isNyxModLoaded(id)) {
+                return "already loaded";
+            }
+            return null;
+        } catch (IOException error) {
+            return error.toString();
+        }
+    }
+
+    private static ModContainer readMod(File file, GameLoader loader, boolean runtime) {
         try (JarFile jar = new JarFile(file)) {
             ZipEntry entry = jar.getEntry(METADATA_FILE);
             if (entry == null) {
                 log("Skipping " + file.getName() + ": missing " + METADATA_FILE);
-                return;
+                return null;
             }
             Properties properties = new Properties();
             try (InputStream input = jar.getInputStream(entry)) {
@@ -331,24 +523,40 @@ public final class NyxRuntime {
             String entrypoint = value(properties, "entrypoint");
             if (id == null || !id.matches("[a-z0-9_-]+")) {
                 log("Skipping " + file.getName() + ": invalid or missing id");
-                return;
+                return null;
             }
             if (entrypoint == null) {
                 log("Skipping " + file.getName() + ": missing entrypoint");
-                return;
+                return null;
             }
             if (isNyxModLoaded(id)) {
                 log("Skipping " + file.getName() + ": duplicate mod id " + id);
-                return;
+                return null;
+            }
+            String mixins = value(properties, "mixins");
+            String widener = value(properties, "accessWidener");
+            if (runtime && (mixins != null || widener != null)) {
+                log("Skipping " + file.getName() + ": mods with mixins or an access widener need a restart");
+                return null;
+            }
+            if (mixins != null) {
+                NYX_MIXINS.put(id, mixins.split("\\s*,\\s*"));
+            }
+            if (widener != null) {
+                NYX_WIDENERS.put(id, widener);
             }
             String name = value(properties, "name");
             String version = value(properties, "version");
             loader.addURL(file.toURI().toURL());
-            MODS.add(new ModContainer(id, name != null ? name : id, version != null ? version : "unknown", entrypoint,
-                    value(properties, "description"), value(properties, "authors"), value(properties, "license"),
-                    value(properties, "website"), value(properties, "issues"), value(properties, "icon"), file, false, "nyx"));
+            ModContainer mod = new ModContainer(id, name != null ? name : id, version != null ? version : "unknown",
+                    entrypoint, value(properties, "description"), value(properties, "authors"),
+                    value(properties, "license"), value(properties, "website"), value(properties, "issues"),
+                    value(properties, "icon"), file, false, "nyx");
+            MODS.add(mod);
+            return mod;
         } catch (IOException error) {
             log("Skipping " + file.getName() + ": " + error);
+            return null;
         }
     }
 

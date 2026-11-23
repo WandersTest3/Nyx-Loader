@@ -148,6 +148,65 @@ public final class Gfx {
         return id;
     }
 
+    private static final Map<String, Integer> REMOTE = new java.util.concurrent.ConcurrentHashMap<String, Integer>();
+    private static final Map<String, BufferedImage> DECODED = new java.util.concurrent.ConcurrentHashMap<String, BufferedImage>();
+    private static final java.util.Set<String> LOADING = java.util.Collections.newSetFromMap(
+            new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+    private static final java.util.concurrent.ExecutorService ICON_LOADER = java.util.concurrent.Executors
+            .newFixedThreadPool(2, runnable -> {
+                Thread thread = new Thread(runnable, "Nyx-Icons");
+                thread.setDaemon(true);
+                return thread;
+            });
+
+    public static int remoteIcon(String url) {
+        if (url == null || url.isEmpty() || url.toLowerCase(java.util.Locale.ROOT).endsWith(".webp")) {
+            return defaultIcon();
+        }
+        Integer cached = REMOTE.get(url);
+        if (cached != null) {
+            return cached.intValue() < 0 ? defaultIcon() : cached.intValue();
+        }
+        BufferedImage image = DECODED.remove(url);
+        if (image != null) {
+            int id = upload(image);
+            REMOTE.put(url, id == 0 ? defaultIcon() : id);
+            return REMOTE.get(url);
+        }
+        if (LOADING.add(url)) {
+            ICON_LOADER.execute(() -> {
+                BufferedImage decoded = null;
+                try {
+                    byte[] data = dev.nyx.loader.modrinth.Modrinth.fetchBytes(url, 1024 * 1024);
+                    decoded = shrink(ImageIO.read(new java.io.ByteArrayInputStream(data)), 64);
+                } catch (Throwable error) {
+                    decoded = null;
+                }
+                if (decoded != null) {
+                    DECODED.put(url, decoded);
+                } else {
+                    REMOTE.put(url, -1);
+                }
+            });
+        }
+        return defaultIcon();
+    }
+
+    private static BufferedImage shrink(BufferedImage image, int size) {
+        if (image == null || image.getWidth() <= size && image.getHeight() <= size) {
+            return image;
+        }
+        BufferedImage result = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        int width = image.getWidth();
+        int height = image.getHeight();
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                result.setRGB(x, y, image.getRGB(x * width / size, y * height / size));
+            }
+        }
+        return result;
+    }
+
     private static int defaultIcon() {
         Integer cached = TEXTURES.get("");
         if (cached != null) {

@@ -117,6 +117,8 @@ public final class NyxClassLoader extends URLClassLoader implements GameLoader {
                     URL url = findOwnClass(name);
                     if (url != null) {
                         type = define(name, url);
+                    } else if (name.startsWith("net.minecraft.") || name.contains("$Anonymous$")) {
+                        type = defineGenerated(name);
                     }
                 }
                 if (type == null) {
@@ -135,14 +137,43 @@ public final class NyxClassLoader extends URLClassLoader implements GameLoader {
         return loadClass(name, false);
     }
 
-    private Class<?> define(String name, URL url) throws ClassNotFoundException {
-        byte[] bytes;
-        try (InputStream input = url.openStream()) {
-            bytes = input.readAllBytes();
-        } catch (IOException error) {
-            throw new ClassNotFoundException(name, error);
+    private Class<?> defineGenerated(String name) {
+        byte[] generated = NyxLaunch.postTransform(name, null, true);
+        if (generated == null) {
+            return null;
         }
-        byte[] transformed = NyxLaunch.postTransform(name, NyxLaunch.preTransform(name, name, bytes), true);
+        definePackageFor(name);
+        return defineClass(name, generated, 0, generated.length, (CodeSource) null);
+    }
+
+    private void definePackageFor(String name) {
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            String pkg = name.substring(0, dot);
+            if (getDefinedPackage(pkg) == null) {
+                try {
+                    definePackage(pkg, null, null, null, null, null, null, null);
+                } catch (IllegalArgumentException ignored) {
+                    getDefinedPackage(pkg);
+                }
+            }
+        }
+    }
+
+    private Class<?> define(String name, URL url) throws ClassNotFoundException {
+        byte[] transformed = ClassCache.get(name);
+        if (transformed == null) {
+            byte[] bytes;
+            try (InputStream input = url.openStream()) {
+                bytes = input.readAllBytes();
+            } catch (IOException error) {
+                throw new ClassNotFoundException(name, error);
+            }
+            int taints = ClassCache.taints();
+            long started = System.nanoTime();
+            transformed = NyxLaunch.postTransform(name, NyxLaunch.preTransform(name, name, bytes), true);
+            ClassCache.put(name, transformed, taints, started);
+        }
         if (transformed == null) {
             throw new ClassNotFoundException(name + " (rejected by transformer)");
         }

@@ -72,6 +72,7 @@ public final class NyxMain {
 
     private static void reportCrash(String[] args, Throwable error) {
         error.printStackTrace(ORIGINAL_ERR);
+        ClassCache.invalidate(new File(option(args, "--gameDir", ".")));
         try {
             File logs = new File(option(args, "--gameDir", "."), "logs");
             logs.mkdirs();
@@ -143,6 +144,7 @@ public final class NyxMain {
         NyxFabricLoader fabricLoader = loadMods(args, cache, remapped, loader, mappings);
         startMixinAndPreLaunch(fabricLoader);
 
+        ClassCache.activate(NyxRuntime.getGameDirectory(), "fabric", new ArrayList<>());
         Class<?> main = Class.forName(MAIN_CLASS, true, loader);
         MethodHandle handle = MethodHandles.publicLookup().findStatic(main, "main",
                 MethodType.methodType(void.class, String[].class));
@@ -260,6 +262,11 @@ public final class NyxMain {
 
         startMixinAndPreLaunch(fabricLoader);
 
+        List<String> transformerNames = new ArrayList<>();
+        for (Object transformer : loader.getTransformers()) {
+            transformerNames.add(transformer.getClass().getName());
+        }
+        ClassCache.activate(gameDir, "forge", transformerNames);
         String target = primary.getLaunchTarget();
         NyxRuntime.log("Launching " + target);
         Class<?> main = Class.forName(target, false, loader);
@@ -378,6 +385,7 @@ public final class NyxMain {
                         + (mod.isNested() ? " (via " + mod.getParent().getMetadata().getId() + ")" : ""));
             }
         }
+        readNyxAccessWideners();
         NyxRuntime.setFabricMods(result.mods);
         return NyxFabricLoader.create(result.mods, new MappingResolverImpl(mappings, NyxLaunch.names()), args);
     }
@@ -414,6 +422,24 @@ public final class NyxMain {
                     + properties.getProperty("fmlbuild.revision.number", "0");
         } catch (IOException error) {
             return "10.13.4";
+        }
+    }
+
+    private static void readNyxAccessWideners() throws IOException {
+        for (dev.nyx.loader.ModContainer mod : NyxRuntime.getMods()) {
+            String path = NyxRuntime.getNyxAccessWidener(mod.id);
+            if (path == null) {
+                continue;
+            }
+            try (ZipFile zip = new ZipFile(mod.file)) {
+                ZipEntry entry = zip.getEntry(path);
+                if (entry == null) {
+                    throw new IOException("Access widener " + path + " missing in " + mod.id);
+                }
+                try (Reader reader = new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8)) {
+                    NyxLaunch.accessWidener().read(reader, mod.id + "/" + path, NyxLaunch.names());
+                }
+            }
         }
     }
 

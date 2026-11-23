@@ -33,6 +33,10 @@ final class GamePatcher {
     private static final String TICK_MARKER = "Ticking screen";
     private static final String FRAME_METHOD = "method_6648";
     private static final String REFRESH = "method_5576";
+    private static final String RUN = "method_5580";
+    private static final String GAME_LOOP = "method_2916";
+    private static final String HAS_CRASHED = "field_3776";
+    private static final String CRASH = "dev/nyx/mc171/NyxCrash";
     private static final String DRAW = "method_1025";
     private static final String CLICK = "method_1026";
 
@@ -80,6 +84,12 @@ final class GamePatcher {
         String tickName = names.method(TICK);
         String frameName = names.method(FRAME_METHOD);
         String refreshName = names.method(REFRESH);
+        String runName = names.method(RUN);
+        String loopName = names.method(GAME_LOOP);
+        String crashedName = names.field(HAS_CRASHED);
+        String self = node.name;
+        boolean loopPatched = false;
+        boolean crashedPatched = false;
         boolean init = false;
         boolean fabric = false;
         boolean tick = false;
@@ -123,10 +133,32 @@ final class GamePatcher {
                 guard.add(new InsnNode(Opcodes.RETURN));
                 guard.add(run);
                 method.instructions.insert(guard);
+            } else if (runName.equals(method.name)) {
+                for (AbstractInsnNode insn : method.instructions.toArray()) {
+                    if (insn instanceof MethodInsnNode) {
+                        MethodInsnNode call = (MethodInsnNode) insn;
+                        if (self.equals(call.owner) && loopName.equals(call.name) && "()V".equals(call.desc)
+                                && call.getOpcode() != Opcodes.INVOKESTATIC) {
+                            method.instructions.set(call, new MethodInsnNode(Opcodes.INVOKESTATIC, CRASH, "runLoop",
+                                    "(Ljava/lang/Object;)V", false));
+                            loopPatched = true;
+                        }
+                    } else if (insn instanceof FieldInsnNode && insn.getOpcode() == Opcodes.GETFIELD) {
+                        FieldInsnNode field = (FieldInsnNode) insn;
+                        if (self.equals(field.owner) && crashedName.equals(field.name) && "Z".equals(field.desc)) {
+                            method.instructions.set(field, new MethodInsnNode(Opcodes.INVOKESTATIC, CRASH, "hasCrashed",
+                                    "(Ljava/lang/Object;)Z", false));
+                            crashedPatched = true;
+                        }
+                    }
+                }
             } else if (frameName.equals(method.name) && startsWithDisplayUpdate(method)) {
                 method.instructions.insert(call(FRAME, "onFrame", "()V"));
                 frame = true;
             }
+        }
+        if (!loopPatched || !crashedPatched) {
+            NyxRuntime.log("Crash recovery hooks: loop=" + loopPatched + " crashed=" + crashedPatched);
         }
         if (!init || !fabric || !tick || !frame) {
             NyxRuntime.log("Minecraft hooks: init=" + init + " fabric=" + fabric + " tick=" + tick + " frame=" + frame);

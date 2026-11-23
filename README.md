@@ -4,7 +4,7 @@
 
 Mod loader client-side para Minecraft Java Edition. Em desenvolvimento.
 
-**Versão atual: 0.0.10**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
+**Versão atual: 0.0.11**: Minecraft **1.7.10**, **Java 21**, mods **Forge** e mods **Fabric** (Legacy Fabric) juntos, além dos mods do Nyx.
 
 ## Como funciona
 
@@ -31,6 +31,13 @@ Desde a 0.0.10, quando o Forge 1.7.10 (10.13.4.1614) está nas bibliotecas, o Ny
 - Sem o Forge nas bibliotecas, o Nyx volta ao modo só Fabric da 0.0.4 e avisa no log quando encontra um mod Forge.
 - O ModMenu lista mods Forge (tag verde), Fabric (laranja) e Nyx (azul).
 - Na primeira execução com Forge, o Nyx cria `config/splash.properties` com `enabled=false`, porque a tela de splash do Forge costuma travar em launchers Android.
+
+## Novidades da 0.0.11
+
+- **Cache de classes**: o resultado das transformações (Forge, OptiFine, remapeamento, patches do Nyx) fica em `.nyx/class-cache/` e é reaproveitado na próxima abertura. Classes alteradas por Mixin não entram no cache. O cache é descartado quando muda algum arquivo em `mods/`, o classpath, a configuração em `config/` ou a versão do Nyx, e também quando a abertura anterior não chegou ao menu principal. Desligue com `class-cache=false` em `config/nyx/loader.properties`.
+- **Recuperação de crash**: quando o jogo crasha no cliente, o Nyx salva o relatório em `crash-reports/`, aponta o provável mod culpado (pela pilha do erro e pelos handlers de Mixin) e mantém o jogo aberto. Dentro do mundo, a tela é fechada e a mensagem aparece no chat. Fora do mundo, ou se o servidor integrado crashar, o mundo é fechado e uma tela mostra o culpado e o trecho do erro. Se o crash envolver shaders do OptiFine (ou acontecer até 60 s depois de trocar de shader), o shader é desativado e salvo como `OFF`. Depois de 3 crashes em 30 s o Nyx desiste e o jogo fecha como antes. Desligue com `crash-recovery=false` em `config/nyx/loader.properties`.
+- **Configurações no ModMenu**: ao passar o mouse no ícone de um mod que tem tela de configuração, o ícone escurece 25% e mostra três barras; clicar abre as configurações. O mod selecionado também ganha um botão no canto superior direito dos detalhes. Funciona com `guiFactory` do Forge, entrypoint `modmenu` de mods Fabric, OptiFine (abre as configurações de vídeo) e mods do Nyx.
+- **Baixar mods do Modrinth**: o botão **Baixar mods** no ModMenu pesquisa mods com versão para 1.7.10 (Forge e Fabric/Legacy Fabric), baixa a versão mais nova com dependências obrigatórias e confere o SHA-1. Mods do Nyx sem mixins e mods Fabric só de cliente (apenas entrypoints `client`/`modmenu`, sem mixins, access widener ou jar-in-jar) carregam na hora, sem reiniciar. Mods Forge e mods com mixins pedem reinício.
 
 ## Compatibilidade com Fabric
 
@@ -97,22 +104,43 @@ API do Nyx (`dev.nyx.api.Nyx`):
 | `getFps()` | FPS atual |
 | `getGameDirectory()`, `getModsDirectory()`, `getConfigDirectory()` | pastas |
 | `isModLoaded(String)`, `log(String)` | utilidades |
+| `onFrame(Runnable)` | roda no começo de cada frame, na thread de renderização |
+| `onWorldJoin(Runnable)`, `onWorldLeave(Runnable)` | entrar e sair de um mundo |
+| `onScreenChange(ScreenListener)` | troca de tela (recebe a anterior e a nova, ou `null`) |
+| `runOnRenderThread(Runnable)`, `isRenderThread()` | executa na thread do OpenGL; use para qualquer chamada de renderização feita fora dela |
+| `sendClientMessage(String)` | mensagem local no chat (aceita códigos `§`) |
+| `getMinecraft()`, `getFrameTimeMillis()` | instância do jogo e tempo do último frame |
+| `registerConfigScreen(modId, ConfigScreenFactory)` | tela de configuração própria (`create(parent)` devolve um `GuiScreen`) |
+
+`NyxOptions` cria uma tela de configuração pronta, salva em `config/nyx/<id>.properties`:
+
+```java
+NyxOptions.of("meu-mod")
+        .title("Meu Mod")
+        .toggle("ativo", "Ativado", true)
+        .cycle("modo", "Modo", "rapido", "rapido", "bonito")
+        .slider("distancia", "Distância", 8, 2, 32)
+        .onSave(this::recarregar)
+        .register();
+```
+
+Para liberdade total, `nyx.mod.properties` aceita `mixins=` (configs Mixin separadas por vírgula) e `accessWidener=`, como um mod Fabric. As classes do Minecraft são as **intermediary** do Legacy Fabric (`net.minecraft.class_1600`...) e o Nyx converte para os nomes do Forge quando ele está presente.
 
 Ações de teclas só disparam sem nenhuma tela aberta.
 
-Classes do LWJGL 2 (`Display`, `Keyboard`, `Mouse`, `GL11`) podem ser usadas diretamente. Classes do Minecraft são ofuscadas nesta versão e ainda não há camada de mapeamentos.
+Classes do LWJGL 2 (`Display`, `Keyboard`, `Mouse`, `GL11`) podem ser usadas diretamente.
 
 Dependências do mod (escopo `provided`): `dev.nyx:nyx-loader` e `org.lwjgl.lwjgl:lwjgl:2.9.1`. Veja `examples/`.
 
 ## ModMenu
 
-O Nyx adiciona um botão com o ícone do osso no canto superior direito do menu principal. Dentro do jogo, **Shift direito** abre o mesmo menu. A tela tem barra de pesquisa, filtro (tudo, mods, bibliotecas), lista de mods à esquerda e os detalhes do mod selecionado à direita (ícone, versão, autores, descrição, licença, arquivo, Site e Issues). Nesta versão o botão de abrir a pasta e os links tentam o navegador do sistema; se ele não existir (Android), o endereço aparece na tela e é copiado para a área de transferência. A tela segue o idioma de `options.txt` (português ou inglês).
+O Nyx adiciona um botão com o ícone do osso no canto superior direito do menu principal. Dentro do jogo, **Shift direito** abre o mesmo menu. A tela mostra só os mods da pasta `mods` e tem barra de pesquisa, filtro (tudo, mods, bibliotecas), lista de mods à esquerda (rolada pela barra do meio) e os detalhes do mod selecionado à direita (ícone, versão, autores, descrição, licença, arquivo, Site, Issues e configurações). Nesta versão o botão de abrir a pasta e os links tentam o navegador do sistema; se ele não existir (Android), o endereço aparece na tela e é copiado para a área de transferência. A tela segue o idioma de `options.txt` (português ou inglês).
 
 ## Exemplos
 
 - `examples/hello-nyx`: escreve no log e muda o título da janela.
 - `examples/session-timer`: mostra o tempo de sessão no título da janela, atualizado pelo hook de tick.
-- `examples/fps-counter`: mostra FPS e tempo do quadro no canto da tela com `onHud`. **F6** liga e desliga; `config/nyx/fps-counter.properties` define o canto (`top-left`, `top-right`, `bottom-left`, `bottom-right`), o fundo e o tempo do quadro.
+- `examples/fps-counter`: mostra FPS e tempo do quadro no canto da tela com `onHud`. **F6** liga e desliga; a tela de configuração (`NyxOptions`) no ModMenu define o canto, o fundo e o tempo do quadro.
 - `examples/log-probe`: cria `logs/nyx-probe.log` na pasta do jogo (versão, Java, pasta e ticks), útil para confirmar que o Nyx está rodando.
 - `examples/fabric-example`: mod **Fabric** com `ClientModInitializer`, um Mixin no menu principal (`class_624.method_1025`) e um access widener (`class_1600.field_3787`, o FPS interno do jogo). Serve de modelo para mods Fabric no Nyx.
 
@@ -138,13 +166,15 @@ A saída fica em `dist/`. O GitHub Actions faz o mesmo a cada push e, ao enviar 
 
 O `Nyx-1.7.10.json` tem a versão vanilla no patch `game` e o Nyx no patch `nyx` (`mainClass` `dev.nyx.loader.launch.NyxMain`, `javaVersion` 21).
 
-## Limitações da 0.0.10
+## Limitações da 0.0.11
 
 - Somente Minecraft 1.7.10 e somente cliente.
 - Forge: testado com Biomes O' Plenty 2.1.0 (mundo do tipo Biomes O' Plenty criado). Coremods que dependem de detalhes do LaunchWrapper original ou do Java 8 podem falhar; mods Forge que usam Mixin próprio (MixinTweaker) não têm o tweaker carregado.
 - Precisa de Java 21 ou mais novo.
 - Mods Fabric precisam ser feitos para 1.7.10 (Legacy Fabric). Mods para outras versões são recusados pelo `depends` ou falham ao carregar.
 - Resolução de dependências simplificada: em cada id fica a maior versão compatível. Mods dentro de outros (jar-in-jar) que não servem para 1.7.10 são ignorados.
+- Mods instalados pelo Modrinth que registram conteúdo, usam mixins ou são do Forge só carregam depois de reiniciar o Minecraft. Os ícones do Modrinth vêm em WebP, que o Java não lê, então a lista usa o ícone padrão.
+- A recuperação de crash não cobre crashes durante a abertura do jogo nem `OutOfMemoryError`.
 - Testado em Linux com Java 21: Legacy Fabric API 1.13.5, Omnilook, MenuFPSUnlocker, Exit Confirmation, Legacy Fixes e Perspective Nametag carregaram e um mundo foi criado. Em launchers Android ainda não foi testado.
 
 ## Licença

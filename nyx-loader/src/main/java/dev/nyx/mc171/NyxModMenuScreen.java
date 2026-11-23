@@ -2,20 +2,12 @@ package dev.nyx.mc171;
 
 import net.minecraft.class_370;
 import net.minecraft.class_388;
+import dev.nyx.loader.InstalledMods;
 import dev.nyx.loader.ModContainer;
 import dev.nyx.loader.NyxRuntime;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.jar.Attributes;
-import java.util.jar.JarFile;
-import java.util.jar.Manifest;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
@@ -63,78 +55,30 @@ public class NyxModMenuScreen extends class_388 {
 
     public NyxModMenuScreen(class_388 parent) {
         this.parent = parent;
-        File modsDir = canonical(NyxRuntime.getModsDirectory());
-        Set<File> shown = new HashSet<File>();
-        List<ModContainer> candidates = new ArrayList<ModContainer>(NyxRuntime.getMods());
-        candidates.addAll(NyxRuntime.getFabricEntries());
-        candidates.addAll(NyxRuntime.getForgeEntries());
-        for (ModContainer mod : candidates) {
-            File file = mod.file == null ? null : canonical(mod.file);
-            if (file != null && modsDir.equals(file.getParentFile())) {
-                all.add(mod);
-                shown.add(file);
-            }
-        }
-        addTweakerJars(modsDir, shown);
-        Collections.sort(all, new Comparator<ModContainer>() {
-            public int compare(ModContainer a, ModContainer b) {
-                if (a.library != b.library) {
-                    return a.library ? 1 : -1;
-                }
-                return a.name.compareToIgnoreCase(b.name);
-            }
-        });
+        all.addAll(InstalledMods.list());
         refilter();
         if (!visible.isEmpty()) {
             selected = visible.get(0);
         }
     }
 
-    private static File canonical(File file) {
-        try {
-            return file.getCanonicalFile();
-        } catch (IOException error) {
-            return file.getAbsoluteFile();
-        }
-    }
-
-    private void addTweakerJars(File modsDir, Set<File> shown) {
-        File[] files = modsDir.listFiles();
-        if (files == null) {
-            return;
-        }
-        Arrays.sort(files);
-        for (File file : files) {
-            String fileName = file.getName();
-            if (!file.isFile() || !fileName.toLowerCase().endsWith(".jar") || shown.contains(canonical(file))) {
-                continue;
-            }
-            try (JarFile jar = new JarFile(file)) {
-                Manifest manifest = jar.getManifest();
-                Attributes attributes = manifest == null ? null : manifest.getMainAttributes();
-                if (attributes == null || attributes.getValue("TweakClass") == null
-                        && attributes.getValue("FMLCorePlugin") == null) {
-                    continue;
+    public void reload() {
+        ModContainer previous = selected;
+        all.clear();
+        all.addAll(InstalledMods.list());
+        refilter();
+        if (previous != null) {
+            for (ModContainer mod : visible) {
+                if (mod.id.equals(previous.id) && mod.kind.equals(previous.kind)) {
+                    selected = mod;
                 }
-                String base = fileName.substring(0, fileName.length() - 4);
-                boolean optifine = jar.getEntry("optifine/OptiFineForgeTweaker.class") != null;
-                String name = optifine ? "OptiFine" : base;
-                String version = attributes.getValue("Implementation-Version");
-                if (optifine && base.startsWith("OptiFine_")) {
-                    version = base.substring("OptiFine_".length());
-                }
-                all.add(new ModContainer(base.toLowerCase(java.util.Locale.ROOT), name,
-                        version == null ? "?" : version, null, optifine ? "OptiFine" : null,
-                        optifine ? "sp614x" : null, null, optifine ? "https://optifine.net" : null, null, null, file,
-                        false, "forge"));
-            } catch (IOException ignored) {
-                continue;
             }
         }
     }
 
     public void method_1044() {
         super.method_1044();
+        reload();
         layout();
     }
 
@@ -325,6 +269,11 @@ public class NyxModMenuScreen extends class_388 {
             Gfx.rect(listX, y, listW, ROW, 0x33FFFFFF);
         }
         Gfx.texture(Gfx.icon(mod), listX + 3, y + 2, 32);
+        if (in(mouseX, mouseY, listX + 3, Math.max(y + 2, LIST_TOP), 32, Math.min(y + 34, listBottom) - Math.max(y + 2, LIST_TOP))
+                && ConfigScreens.has(mod)) {
+            Gfx.rect(listX + 3, y + 2, 32, 32, 0x40000000);
+            bars(listX + 3, y + 2, 32);
+        }
         int textX = listX + 40;
         int maxW = listW - 46;
         String name = font.method_955(mod.name, maxW - 40);
@@ -355,7 +304,23 @@ public class NyxModMenuScreen extends class_388 {
         ModContainer mod = selected;
         Gfx.texture(Gfx.icon(mod), rightX, SEARCH_Y, 32);
         int textX = rightX + 36;
-        text(font, font.method_955(mod.name, rightW - 40), textX, SEARCH_Y + 1, 0xFFFFFFFF);
+        boolean config = ConfigScreens.has(mod);
+        int nameW = rightW - 40 - (config ? BUTTON_H + 4 : 0);
+        text(font, font.method_955(mod.name, nameW), textX, SEARCH_Y + 1, 0xFFFFFFFF);
+        if (config) {
+            int bx = rightX + rightW - BUTTON_H;
+            boolean hover = in(mouseX, mouseY, bx, SEARCH_Y, BUTTON_H, BUTTON_H);
+            Gfx.button(bx, SEARCH_Y, BUTTON_H, BUTTON_H, hover, true);
+            bars(bx, SEARCH_Y, BUTTON_H);
+            if (hover) {
+                String label = Lang.t("config");
+                int width = font.method_954(label);
+                int x = Math.min(bx, field_1230 - width - 10);
+                Gfx.rect(x, SEARCH_Y + BUTTON_H + 2, width + 6, 12, 0xF0100010);
+                Gfx.border(x, SEARCH_Y + BUTTON_H + 2, width + 6, 12, 0xFF57197F);
+                text(font, label, x + 3, SEARCH_Y + BUTTON_H + 4, 0xFFFFFFFF);
+            }
+        }
         text(font, "v" + mod.version, textX, SEARCH_Y + 12, 0xFF9A9A9A);
         if (mod.authors != null) {
             text(font, font.method_955(Lang.t("by") + mod.authors, rightW - 40), textX, SEARCH_Y + 23, 0xFF9A9A9A);
@@ -408,6 +373,31 @@ public class NyxModMenuScreen extends class_388 {
         Gfx.noScissor();
     }
 
+    private static void bars(int x, int y, int size) {
+        int width = size / 2;
+        int left = x + (size - width) / 2;
+        int gap = Math.max(3, size / 6);
+        int top = y + size / 2 - gap - 1;
+        for (int i = 0; i < 3; i++) {
+            Gfx.rect(left, top + i * gap, width, 2, 0xFFFFFFFF);
+        }
+    }
+
+    private void openConfig(ModContainer mod) {
+        try {
+            Object screen = ConfigScreens.open(mod, this);
+            if (screen == null) {
+                showToast(Lang.t("config_none"));
+                return;
+            }
+            field_1229.method_2928((class_388) screen);
+        } catch (Throwable error) {
+            NyxRuntime.log("Could not open the settings of " + mod.id + ": " + error);
+            error.printStackTrace();
+            showToast(Lang.t("config_failed") + error.getClass().getSimpleName());
+        }
+    }
+
     private void drawLink(class_370 font, String label, int x, int y, int width, boolean enabled, int mouseX, int mouseY) {
         boolean hover = enabled && mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + BUTTON_H;
         Gfx.button(x, y, width, BUTTON_H, hover, enabled);
@@ -416,7 +406,9 @@ public class NyxModMenuScreen extends class_388 {
     }
 
     private void drawButtons(class_370 font, int mouseX, int mouseY) {
-        drawLink(font, Lang.t("folder"), listX, buttonY, listW, true, mouseX, mouseY);
+        int half = (listW - 4) / 2;
+        drawLink(font, Lang.t("dl_folder"), listX, buttonY, half, true, mouseX, mouseY);
+        drawLink(font, Lang.t("dl_open"), listX + half + 4, buttonY, listW - half - 4, true, mouseX, mouseY);
         drawLink(font, Lang.t("done"), rightX, buttonY, rightW, true, mouseX, mouseY);
     }
 
@@ -481,13 +473,34 @@ public class NyxModMenuScreen extends class_388 {
             refilter();
             return;
         }
-        if (in(mouseX, mouseY, listX, buttonY, listW, BUTTON_H)) {
+        int bottomHalf = (listW - 4) / 2;
+        if (in(mouseX, mouseY, listX, buttonY, bottomHalf, BUTTON_H)) {
             openFolder();
+            return;
+        }
+        if (in(mouseX, mouseY, listX + bottomHalf + 4, buttonY, listW - bottomHalf - 4, BUTTON_H)) {
+            field_1229.method_2928(new NyxDownloadScreen(this));
             return;
         }
         if (in(mouseX, mouseY, rightX, buttonY, rightW, BUTTON_H)) {
             close();
             return;
+        }
+        if (selected != null && in(mouseX, mouseY, rightX + rightW - BUTTON_H, SEARCH_Y, BUTTON_H, BUTTON_H)
+                && ConfigScreens.has(selected)) {
+            openConfig(selected);
+            return;
+        }
+        if (in(mouseX, mouseY, listX + 3, LIST_TOP, 32, listBottom - LIST_TOP) && !overBar(mouseX, mouseY)) {
+            int row = (mouseY - LIST_TOP + listScroll) / ROW;
+            int rowY = LIST_TOP + row * ROW - listScroll;
+            if (row >= 0 && row < visible.size() && mouseY >= rowY + 2 && mouseY < rowY + 34
+                    && ConfigScreens.has(visible.get(row))) {
+                selected = visible.get(row);
+                detailScroll = 0;
+                openConfig(selected);
+                return;
+            }
         }
         int half = (rightW - 4) / 2;
         int linkY = LIST_TOP - 2;

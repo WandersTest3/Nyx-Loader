@@ -4,6 +4,7 @@ import dev.nyx.api.Nyx;
 import dev.nyx.api.NyxConfig;
 import dev.nyx.api.NyxGraphics;
 import dev.nyx.api.NyxMod;
+import dev.nyx.api.NyxOptions;
 import org.lwjgl.input.Keyboard;
 
 public class FpsCounter implements NyxMod {
@@ -21,15 +22,16 @@ public class FpsCounter implements NyxMod {
     @Override
     public void onInitialize() {
         config = Nyx.getConfig(ID);
-        config.setDefault("enabled", "true");
-        config.setDefault("corner", "top-left");
-        config.setDefault("show-frame-time", "true");
-        config.setDefault("background", "true");
-        config.save();
-        enabled = config.getBoolean("enabled", true);
-        corner = config.get("corner", "top-left");
-        showFrameTime = config.getBoolean("show-frame-time", true);
-        background = config.getBoolean("background", true);
+        NyxOptions.of(ID)
+                .title("FPS Counter")
+                .toggle("enabled", "Mostrar FPS", "Liga ou desliga o contador (atalho: F6).", true)
+                .cycleDescribed("corner", "Canto", "Canto da tela onde o contador aparece.", "top-left",
+                        "top-left", "top-right", "bottom-left", "bottom-right")
+                .toggle("show-frame-time", "Tempo do quadro", "Mostra o tempo de cada quadro em ms.", true)
+                .toggle("background", "Fundo", "Desenha um fundo escuro atr\u00e1s do texto.", true)
+                .onSave(this::reload)
+                .register();
+        reload();
         Nyx.registerKey(ID, "toggle", Keyboard.KEY_F6, new Runnable() {
             @Override
             public void run() {
@@ -38,6 +40,13 @@ public class FpsCounter implements NyxMod {
             }
         });
         Nyx.onHud(this::render);
+    }
+
+    private void reload() {
+        enabled = config.getBoolean("enabled", true);
+        corner = config.get("corner", "top-left");
+        showFrameTime = config.getBoolean("show-frame-time", true);
+        background = config.getBoolean("background", true);
     }
 
     private void render(NyxGraphics graphics) {
